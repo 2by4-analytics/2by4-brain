@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2by4 Brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #222222;
+    --accent: #e8ff00;
+    --accent-dim: rgba(232, 255, 0, 0.12);
+    --accent-mid: rgba(232, 255, 0, 0.4);
+    --text: #f0f0f0;
+    --text-dim: #666;
+    --text-mid: #999;
+    --red: #ff4444;
+    --yellow: #ffaa00;
+    --green: #00ff88;
+    --red-dim: rgba(255, 68, 68, 0.1);
+    --yellow-dim: rgba(255, 170, 0, 0.1);
+    --green-dim: rgba(0, 255, 136, 0.1);
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    grid-template-columns: 280px 1fr 380px;
+    overflow: hidden;
+  }
+
+  /* HEADER */
+  header {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  .logo span { color: var(--text-dim); font-weight: 400; }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-mid);
+    font-family: var(--mono);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .run-btn {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .run-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  /* LEFT SIDEBAR — Client Selector */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .client-type-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .type-tab {
+    flex: 1;
+    padding: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-align: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+
+  .type-tab.active {
+    background: var(--accent-dim);
+    border-color: var(--accent-mid);
+    color: var(--accent);
+  }
+
+  .client-list { display: flex; flex-direction: column; gap: 2px; }
+
+  .client-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+    border-radius: 2px;
+  }
+
+  .client-item:hover { background: var(--surface2); border-color: var(--border); }
+
+  .client-item.active {
+    background: var(--accent-dim);
+    border-color: var(--accent-mid);
+  }
+
+  .client-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .client-item.active .client-name { color: var(--accent); }
+
+  .client-cpp {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .client-cpp.over { color: var(--red); }
+  .client-cpp.good { color: var(--green); }
+
+  .sidebar-scroll { flex: 1; overflow-y: auto; padding: 12px; }
+
+  /* MAIN — Briefing */
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+
+  .main-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .main-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .briefing-date {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .briefing-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .briefing-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--text-dim);
+  }
+
+  .briefing-empty-icon {
+    font-size: 32px;
+    opacity: 0.3;
+  }
+
+  .briefing-empty p {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  /* Briefing client card */
+  .briefing-client {
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .briefing-client-header {
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .briefing-client-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  .briefing-status-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    letter-spacing: 0.05em;
+  }
+
+  .badge-ok { background: var(--green-dim); color: var(--green); }
+  .badge-warn { background: var(--yellow-dim); color: var(--yellow); }
+  .badge-alert { background: var(--red-dim); color: var(--red); }
+  .badge-error { background: rgba(100,100,100,0.1); color: var(--text-dim); }
+
+  .briefing-content {
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  /* Markdown-ish rendering */
+  .briefing-content h2 {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 16px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .briefing-content h2:first-child { margin-top: 0; }
+
+  .briefing-content ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .briefing-content li::before { content: '— '; color: var(--text-dim); }
+
+  .briefing-content p { margin-bottom: 8px; }
+
+  .flag-red { color: var(--red); }
+  .flag-yellow { color: var(--yellow); }
+  .flag-green { color: var(--green); }
+
+  /* RIGHT — Chat */
+  .chat-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .chat-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .chat-header-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .active-context {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    padding: 3px 8px;
+    border: 1px solid var(--accent-mid);
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 100%;
+  }
+
+  .message-role {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .message.user .message-role { color: var(--accent); }
+  .message.assistant .message-role { color: var(--text-dim); }
+
+  .message-content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--surface2);
+    padding: 10px 12px;
+    border-left: 2px solid var(--border);
+  }
+
+  .message.user .message-content {
+    border-left-color: var(--accent-mid);
+    background: var(--accent-dim);
+    color: var(--text);
+  }
+
+  .message.assistant .message-content {
+    border-left-color: var(--border);
+  }
+
+  .message-content p { margin-bottom: 6px; }
+  .message-content p:last-child { margin-bottom: 0; }
+  .message-content strong { color: var(--accent); font-weight: 600; }
+  .message-content ul { list-style: none; padding: 0; }
+  .message-content li { padding: 2px 0; }
+  .message-content li::before { content: '→ '; color: var(--text-dim); }
+  .message-content code {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface);
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  .thinking {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-left: 2px solid var(--border);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .thinking-dots span {
+    animation: blink 1.4s infinite;
+    opacity: 0;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink {
+    0%, 80%, 100% { opacity: 0; }
+    40% { opacity: 1; }
+  }
+
+  .chat-input-area {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+
+  .chat-input {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: none;
+    outline: none;
+    line-height: 1.5;
+    min-height: 42px;
+    max-height: 120px;
+    transition: border-color 0.15s;
+  }
+
+  .chat-input:focus { border-color: var(--accent-mid); }
+  .chat-input::placeholder { color: var(--text-dim); }
+
+  .send-btn {
+    background: var(--accent);
+    border: none;
+    color: var(--bg);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 10px 14px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: opacity 0.15s;
+    align-self: flex-end;
+  }
+
+  .send-btn:hover { opacity: 0.85; }
+  .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,10,10,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    z-index: 100;
+    display: none;
+  }
+
+  .welcome-msg {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 10px 12px;
+    border-left: 2px solid var(--border);
+    background: var(--surface2);
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">2×4 <span>BRAIN</span></div>
+  <div class="header-status">
+    <div class="status-dot"></div>
+    <span id="header-date">—</span>
+  </div>
+  <button class="run-btn" onclick="runBriefing()">▶ RUN BRIEFING</button>
+</header>
+
+<!-- LEFT: Client Selector -->
+<div class="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-label">Client Type</div>
+    <div class="client-type-tabs">
+      <button class="type-tab active" onclick="selectType('sticker', this)">STICKER</button>
+      <button class="type-tab" onclick="selectType('shed', this)">SHED</button>
+    </div>
+    <div class="sidebar-label">Client</div>
+    <div class="client-list" id="client-list"></div>
+  </div>
+</div>
+
+<!-- MAIN: Briefing -->
+<div class="main">
+  <div class="main-header">
+    <div class="main-title">Morning Briefing</div>
+    <div class="briefing-date" id="briefing-date">—</div>
+  </div>
+  <div class="briefing-scroll" id="briefing-scroll">
+    <div class="briefing-empty" id="briefing-empty">
+      <div class="briefing-empty-icon">◎</div>
+      <p>No briefing loaded</p>
+      <p style="font-size:10px;margin-top:4px;">Run briefing or wait for 7am auto-run</p>
+    </div>
+    <div id="briefing-content" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- RIGHT: Chat -->
+<div class="chat-panel">
+  <div class="chat-header">
+    <div class="chat-header-title">Brain</div>
+    <div class="active-context" id="active-context" style="display:none;"></div>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="welcome-msg">
+      Good morning. Select a client to load context,<br>
+      or ask me anything about your accounts.<br><br>
+      Try: "What needs my attention today?" or<br>
+      "Let's work on the plant client."
+    </div>
+  </div>
+  <div class="chat-input-area">
+    <textarea
+      class="chat-input"
+      id="chat-input"
+      placeholder="Ask Brain..."
+      rows="1"
+      onkeydown="handleKey(event)"
+      oninput="autoResize(this)"
+    ></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()">SEND</button>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loading">RUNNING BRIEFING...</div>
+
+<script>
+const CLIENTS = {
+  sticker: [
+    { id: 'eric-plant', name: 'Eric / Plant', cppTarget: 18 },
+    { id: 'eric-faith', name: 'Eric / Faith', cppTarget: 25 },
+    { id: 'jorge', name: 'Jorge', cppTarget: 18 },
+    { id: 'brian', name: 'Brian', cppTarget: 18 },
+    { id: 'matteo', name: 'Matteo', cppTarget: 18 },
+    { id: 'todd', name: 'Todd', cppTarget: 18 },
+    { id: 'coco-vm', name: 'Coco-VM', cppTarget: 18 },
+    { id: 'coco-blackwolf', name: 'Coco-Black Wolf', cppTarget: 18 },
+  ],
+  shed: [
+    { id: 'craig-revmoto', name: 'Craig-RevMoto' },
+    { id: 'craig-readynation', name: 'Craig-ReadyNation' },
+  ]
+};
+
+let currentType = 'sticker';
+let activeClient = null;
+let chatHistory = [];
+
+// Init
+document.getElementById('header-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+renderClientList('sticker');
+loadBriefing();
+
+function selectType(type, el) {
+  currentType = type;
+  document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderClientList(type);
+}
+
+function renderClientList(type) {
+  const list = document.getElementById('client-list');
+  list.innerHTML = '';
+  CLIENTS[type].forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'client-item' + (activeClient?.id === c.id ? ' active' : '');
+    div.innerHTML = `
+      <span class="client-name">${c.name}</span>
+      ${c.cppTarget ? `<span class="client-cpp">$${c.cppTarget}</span>` : ''}
+    `;
+    div.onclick = () => selectClient(c);
+    list.appendChild(div);
+  });
+}
+
+function selectClient(client) {
+  activeClient = { ...client, type: currentType };
+  renderClientList(currentType);
+
+  const ctx = document.getElementById('active-context');
+  ctx.textContent = client.name;
+  ctx.style.display = 'block';
+
+  // Inject context message into chat
+  const msg = `Now working on: ${client.name}`;
+  appendMessage('assistant', msg);
+  chatHistory.push({ role: 'assistant', content: msg });
+}
+
+async function loadBriefing() {
+  try {
+    const res = await fetch('/api/briefing/latest');
+    const data = await res.json();
+    if (data.empty || !data.clients) return;
+    renderBriefing(data);
+  } catch (e) {
+    console.error('Failed to load briefing:', e);
+  }
+}
+
+function renderBriefing(data) {
+  document.getElementById('briefing-empty').style.display = 'none';
+  const content = document.getElementById('briefing-content');
+  content.style.display = 'block';
+
+  document.getElementById('briefing-date').textContent =
+    `Report for ${data.reportDate} · Generated ${new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+
+  content.innerHTML = data.clients.map(c => {
+    if (c.status === 'error') {
+      return `<div class="briefing-client">
+        <div class="briefing-client-header">
+          <span class="briefing-client-name">${c.clientName}</span>
+          <span class="briefing-status-badge badge-error">ERROR</span>
+        </div>
+        <div class="briefing-content"><p style="color:var(--red)">${c.error}</p></div>
+      </div>`;
+    }
+
+    // Determine badge from analysis content
+    const hasRed = c.analysis.includes('🔴') && !c.analysis.match(/🔴[^\n]*\n\s*None/i);
+    const hasYellow = c.analysis.includes('🟡') && !c.analysis.match(/🟡[^\n]*\n\s*None/i);
+    const badgeClass = hasRed ? 'badge-alert' : hasYellow ? 'badge-warn' : 'badge-ok';
+    const badgeText = hasRed ? 'ATTENTION' : hasYellow ? 'WATCH' : 'ON TRACK';
+
+    return `<div class="briefing-client">
+      <div class="briefing-client-header">
+        <span class="briefing-client-name">${c.clientName}</span>
+        <span class="briefing-status-badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="briefing-content">${renderMarkdown(c.analysis)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li><strong>$1.</strong> $2</li>')
+    .replace(/🔴/g, '<span class="flag-red">🔴</span>')
+    .replace(/🟡/g, '<span class="flag-yellow">🟡</span>')
+    .replace(/🟢/g, '<span class="flag-green">🟢</span>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[hlu]|<\/[hlu])/gm, '')
+    .replace(/<li>/g, '</p><li>')
+    .replace(/<\/li>(\n<li>)/g, '</li><li>');
+}
+
+async function runBriefing() {
+  document.getElementById('loading').style.display = 'flex';
+  try {
+    await fetch('/api/briefing/run', { method: 'POST' });
+    setTimeout(async () => {
+      await loadBriefing();
+      document.getElementById('loading').style.display = 'none';
+    }, 8000);
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    alert('Briefing failed: ' + e.message);
+  }
+}
+
+// Chat
+function appendMessage(role, content) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+  div.innerHTML = `
+    <div class="message-role">${role === 'user' ? 'You' : 'Brain'}</div>
+    <div class="message-content">${renderMarkdown(content)}</div>
+  `;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendThinking() {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.id = 'thinking';
+  div.className = 'message assistant';
+  div.innerHTML = `
+    <div class="message-role">Brain</div>
+    <div class="thinking">
+      thinking
+      <div class="thinking-dots"><span>.</span><span>.</span><span>.</span></div>
+    </div>
+  `;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  appendMessage('user', text);
+  chatHistory.push({ role: 'user', content: text });
+
+  const thinking = appendThinking();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: chatHistory,
+        clientContext: activeClient
+      })
+    });
+
+    const data = await res.json();
+    thinking.remove();
+
+    const reply = data.response || data.error || 'No response';
+    appendMessage('assistant', reply);
+    chatHistory.push({ role: 'assistant', content: reply });
+  } catch (e) {
+    thinking.remove();
+    appendMessage('assistant', `Error: ${e.message}`);
+  } finally {
+    document.getElementById('send-btn').disabled = false;
+    input.focus();
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+</script>
+</body>
+</html>
