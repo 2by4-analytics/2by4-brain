@@ -11,8 +11,8 @@ async function fetchDashboardData(clientId, date) {
   const url = `${DASHBOARD_URL}/api/dashboard/${clientId}?startDate=${date}&endDate=${date}`;
   const res = await fetch(url, {
     headers: {
-      'Authorization': 'Basic ' + Buffer.from(`${DASHBOARD_USER}:${DASHBOARD_PASS}`).toString('base64')
-    }
+  'x-dash-password': process.env.DASH_PASSWORD
+}
   });
   if (!res.ok) throw new Error(`Dashboard fetch failed for ${clientId}: ${res.status}`);
   return res.json();
