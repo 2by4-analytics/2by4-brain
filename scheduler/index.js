@@ -4,8 +4,6 @@ import { saveBriefing } from '../store/briefings.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
-const DASHBOARD_USER = process.env.ADMIN_USER || 'admin';
-const DASHBOARD_PASS = process.env.ADMIN_PASS || '';
 
 async function fetchDashboardData(clientId, date) {
   const url = `${DASHBOARD_URL}/api/dashboard/${clientId}?startDate=${date}&endDate=${date}`;
