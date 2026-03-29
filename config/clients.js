@@ -1,77 +1,74 @@
 export const CLIENTS = {
-  // Sticker Funnel Clients
-  'eric-plant': {
+  'client1': {
     name: 'Eric / Plant',
     type: 'sticker',
     niche: 'houseplant',
     cppTarget: 18,
     dailySpend: 4000,
     platform: ['meta'],
-    brief: 'houseplant',
     active: true
   },
-  'eric-faith': {
+  'client1-faith': {
     name: 'Eric / Faith',
     type: 'sticker',
-    niche: 'faith',
     cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-  'jorge': {
+  'client2': {
     name: 'Jorge',
     type: 'sticker',
     cppTarget: 18,
     platform: ['meta'],
     active: true
   },
-  'brian': {
+  'brian-mm0ufx84': {
     name: 'Brian',
     type: 'sticker',
-    cppTarget: 18,
+    cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-  'matteo': {
+  'matteo-mm0urlzh': {
     name: 'Matteo',
     type: 'sticker',
-    cppTarget: 18,
+    cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-  'todd': {
+  'todd-mn3cd22p': {
     name: 'Todd',
     type: 'sticker',
-    cppTarget: 18,
+    cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-  'coco-vm': {
-    name: 'Coco-VM',
+  'coco-vm-mn7htjvz': {
+    name: 'Coco - VM',
     type: 'sticker',
-    cppTarget: 18,
+    cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-  'coco-blackwolf': {
-    name: 'Coco-Black Wolf',
+  'coco-black-wolf-mn7hvdev': {
+    name: 'Coco - Black Wolf',
     type: 'sticker',
-    cppTarget: 18,
+    cppTarget: 25,
     platform: ['meta'],
     active: true
   },
-
-  // Shed Clients
-  'craig-revmoto': {
+  'craig-revmoto-mmjeuw8s': {
     name: 'Craig-RevMoto',
     type: 'shed',
+    cppTarget: 25,
     platform: ['meta', 'google'],
     stack: ['wordpress', 'gohighlevel', 'tagmanager'],
     active: true
   },
-  'craig-readynation': {
+  'craig-readynation-mmkodtu2': {
     name: 'Craig-ReadyNation',
     type: 'shed',
+    cppTarget: 25,
     platform: ['meta', 'google'],
     stack: ['wordpress', 'gohighlevel', 'tagmanager'],
     active: true
