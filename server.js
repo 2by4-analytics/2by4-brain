@@ -13,13 +13,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'dashboard')));
 
 // Auth middleware (matches existing claude-dash pattern)
-const auth = (req, res, next) => {
-  const b64 = (req.headers.authorization || '').split(' ')[1] || '';
-  const [user, pass] = Buffer.from(b64, 'base64').toString().split(':');
-  if (user === process.env.ADMIN_USER && pass === process.env.ADMIN_PASS) return next();
-  res.set('WWW-Authenticate', 'Basic realm="2by4 Brain"');
-  res.status(401).send('Unauthorized');
-};
+const auth = (req, res, next) => next();
 
 // Dashboard home
 app.get('/', auth, (req, res) => {
