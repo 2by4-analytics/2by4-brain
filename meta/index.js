@@ -149,7 +149,7 @@ export async function getAdCreatives(clientId, days = 7) {
   console.log(`[Meta] Fetched ${ads.length} active ads for ${clientId}`);
 
   // ── Request 2: ad-level insights ─────────────────────────────────────────
-  const insightRows = await paginate(`${accountId}/ads/insights`, {
+  const insightRows = await paginate(`${accountId}/insights`, {
     fields: 'ad_id,ad_name,spend,actions,cost_per_action_type,ctr,cpc',
     level: 'ad',
     ...insightDateParam,
