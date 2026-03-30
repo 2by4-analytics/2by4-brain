@@ -584,30 +584,31 @@
 <div class="loading-overlay" id="loading">RUNNING BRIEFING...</div>
 
 <script>
-const CLIENTS = {
-  sticker: [
-    { id: 'eric-plant', name: 'Eric / Plant', cppTarget: 18 },
-    { id: 'eric-faith', name: 'Eric / Faith', cppTarget: 25 },
-    { id: 'jorge', name: 'Jorge', cppTarget: 18 },
-    { id: 'brian', name: 'Brian', cppTarget: 18 },
-    { id: 'matteo', name: 'Matteo', cppTarget: 18 },
-    { id: 'todd', name: 'Todd', cppTarget: 18 },
-    { id: 'coco-vm', name: 'Coco-VM', cppTarget: 18 },
-    { id: 'coco-blackwolf', name: 'Coco-Black Wolf', cppTarget: 18 },
-  ],
-  shed: [
-    { id: 'craig-revmoto', name: 'Craig-RevMoto' },
-    { id: 'craig-readynation', name: 'Craig-ReadyNation' },
-  ]
-};
-
+let allClients = {};
 let currentType = 'sticker';
 let activeClient = null;
 let chatHistory = [];
 
+async function loadClients() {
+  try {
+    const res = await fetch('/api/clients-list');
+    const data = await res.json();
+    allClients = data;
+    renderClientList(currentType);
+  } catch (e) {
+    console.error('Failed to load clients:', e);
+  }
+}
+
+function getClientsByType(type) {
+  return Object.entries(allClients)
+    .filter(([, c]) => c.type === type)
+    .map(([id, c]) => ({ id, ...c }));
+}
+
 // Init
 document.getElementById('header-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-renderClientList('sticker');
+loadClients();
 loadBriefing();
 
 function selectType(type, el) {
@@ -620,7 +621,12 @@ function selectType(type, el) {
 function renderClientList(type) {
   const list = document.getElementById('client-list');
   list.innerHTML = '';
-  CLIENTS[type].forEach(c => {
+  const clients = getClientsByType(type);
+  if (!clients.length) {
+    list.innerHTML = `<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);padding:8px 0;">No clients</div>`;
+    return;
+  }
+  clients.forEach(c => {
     const div = document.createElement('div');
     div.className = 'client-item' + (activeClient?.id === c.id ? ' active' : '');
     div.innerHTML = `
@@ -633,14 +639,11 @@ function renderClientList(type) {
 }
 
 function selectClient(client) {
-  activeClient = { ...client, type: currentType };
+  activeClient = { ...client };
   renderClientList(currentType);
-
   const ctx = document.getElementById('active-context');
   ctx.textContent = client.name;
   ctx.style.display = 'block';
-
-  // Inject context message into chat
   const msg = `Now working on: ${client.name}`;
   appendMessage('assistant', msg);
   chatHistory.push({ role: 'assistant', content: msg });
@@ -661,10 +664,8 @@ function renderBriefing(data) {
   document.getElementById('briefing-empty').style.display = 'none';
   const content = document.getElementById('briefing-content');
   content.style.display = 'block';
-
   document.getElementById('briefing-date').textContent =
     `Report for ${data.reportDate} · Generated ${new Date(data.generatedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-
   content.innerHTML = data.clients.map(c => {
     if (c.status === 'error') {
       return `<div class="briefing-client">
@@ -675,13 +676,10 @@ function renderBriefing(data) {
         <div class="briefing-content"><p style="color:var(--red)">${c.error}</p></div>
       </div>`;
     }
-
-    // Determine badge from analysis content
     const hasRed = c.analysis.includes('🔴') && !c.analysis.match(/🔴[^\n]*\n\s*None/i);
     const hasYellow = c.analysis.includes('🟡') && !c.analysis.match(/🟡[^\n]*\n\s*None/i);
     const badgeClass = hasRed ? 'badge-alert' : hasYellow ? 'badge-warn' : 'badge-ok';
     const badgeText = hasRed ? 'ATTENTION' : hasYellow ? 'WATCH' : 'ON TRACK';
-
     return `<div class="briefing-client">
       <div class="briefing-client-header">
         <span class="briefing-client-name">${c.clientName}</span>
@@ -711,17 +709,30 @@ async function runBriefing() {
   document.getElementById('loading').style.display = 'flex';
   try {
     await fetch('/api/briefing/run', { method: 'POST' });
-    setTimeout(async () => {
-      await loadBriefing();
-      document.getElementById('loading').style.display = 'none';
-    }, 8000);
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch('/api/briefing/latest');
+        const data = await res.json();
+        const age = data.generatedAt ? (Date.now() - new Date(data.generatedAt).getTime()) : 999999;
+        if (!data.empty && age < 60000) {
+          clearInterval(poll);
+          document.getElementById('loading').style.display = 'none';
+          renderBriefing(data);
+        }
+      } catch {}
+      if (attempts > 60) {
+        clearInterval(poll);
+        document.getElementById('loading').style.display = 'none';
+      }
+    }, 3000);
   } catch (e) {
     document.getElementById('loading').style.display = 'none';
     alert('Briefing failed: ' + e.message);
   }
 }
 
-// Chat
 function appendMessage(role, content) {
   const msgs = document.getElementById('chat-messages');
   const div = document.createElement('div');
@@ -755,29 +766,20 @@ async function sendMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
-
   input.value = '';
   input.style.height = 'auto';
   document.getElementById('send-btn').disabled = true;
-
   appendMessage('user', text);
   chatHistory.push({ role: 'user', content: text });
-
   const thinking = appendThinking();
-
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: chatHistory,
-        clientContext: activeClient
-      })
+      body: JSON.stringify({ messages: chatHistory, clientContext: activeClient })
     });
-
     const data = await res.json();
     thinking.remove();
-
     const reply = data.response || data.error || 'No response';
     appendMessage('assistant', reply);
     chatHistory.push({ role: 'assistant', content: reply });
