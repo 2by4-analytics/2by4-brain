@@ -416,6 +416,30 @@
     color: var(--accent);
   }
 
+  .message-content table, .briefing-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.message-content th, .briefing-content th {
+  text-align: left;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.message-content td, .briefing-content td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.message-content tr:last-child td, .briefing-content tr:last-child td {
+  border-bottom: none;
+}
   .thinking {
     display: flex;
     align-items: center;
@@ -691,6 +715,16 @@ function renderBriefing(data) {
 }
 
 function renderMarkdown(text) {
+  // Tables
+  text = text.replace(/\|(.+)\|\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/gm, (match, header, rows) => {
+    const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+    const trs = rows.trim().split('\n').map(row => {
+      const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+  });
+
   return text
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -699,8 +733,10 @@ function renderMarkdown(text) {
     .replace(/🔴/g, '<span class="flag-red">🔴</span>')
     .replace(/🟡/g, '<span class="flag-yellow">🟡</span>')
     .replace(/🟢/g, '<span class="flag-green">🟢</span>')
+    .replace(/✅/g, '<span class="flag-green">✅</span>')
+    .replace(/⚠️/g, '<span class="flag-yellow">⚠️</span>')
     .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[hlu]|<\/[hlu])/gm, '')
+    .replace(/^(?!<[hlu]|<\/[hlu]|<ta|<\/ta)/gm, '')
     .replace(/<li>/g, '</p><li>')
     .replace(/<\/li>(\n<li>)/g, '</li><li>');
 }
