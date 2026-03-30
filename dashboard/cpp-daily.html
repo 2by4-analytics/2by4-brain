@@ -177,6 +177,44 @@
     min-width: 100px;
   }
 
+  .cpp-7d-block {
+    text-align: right;
+    min-width: 90px;
+    border-left: 1px solid var(--border);
+    padding-left: 24px;
+  }
+
+  .cpp-7d-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .cpp-7d-value {
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text-mid);
+  }
+
+  .cpp-7d-loading {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    animation: fade 1.2s ease-in-out infinite;
+  }
+
+  .cpp-vs {
+    font-family: var(--mono);
+    font-size: 10px;
+    margin-top: 3px;
+  }
+
+  .cpp-vs.better { color: var(--green); }
+  .cpp-vs.worse  { color: var(--red); }
+
   .cpp-number {
     font-family: var(--mono);
     font-size: 28px;
@@ -317,23 +355,53 @@ async function load() {
   btn.disabled = true;
   btn.textContent = 'Loading...';
 
+  // Fire both requests in parallel — render daily immediately, patch 7D when ready
+  const dailyPromise = fetch('/api/cpp-daily').then(r => r.json());
+  const weekPromise  = fetch('/api/cpp-7day').then(r => r.json());
+
   try {
-    const res = await fetch('/api/cpp-daily');
-    if (!res.ok) throw new Error(`${res.status}`);
-    const rows = await res.json();
+    const rows = await dailyPromise;
     render(rows);
+    btn.disabled = false;
+    btn.textContent = 'Refresh';
+
+    // 7D loads in background — patch each row when it arrives
+    weekPromise.then(weekRows => {
+      const byId = {};
+      for (const r of weekRows) byId[r.id] = r;
+      for (const [id, w] of Object.entries(byId)) {
+        const el = document.getElementById(`7d-${id}`);
+        if (!el) continue;
+        if (w.error) {
+          el.innerHTML = `<div class="cpp-7d-label">7D Avg</div><div class="cpp-7d-value" style="color:var(--red);font-size:11px;">err</div>`;
+        } else {
+          const dayCpp = parseFloat(document.getElementById(`cpp-${id}`)?.dataset.cpp);
+          let vsHtml = '';
+          if (dayCpp && w.cpp) {
+            const diff = dayCpp - w.cpp;
+            const pct = (diff / w.cpp * 100).toFixed(0);
+            const cls = diff <= 0 ? 'better' : 'worse';
+            vsHtml = `<div class="cpp-vs ${cls}">${diff <= 0 ? '' : '+'}${pct}% vs avg</div>`;
+          }
+          el.innerHTML = `<div class="cpp-7d-label">7D Avg</div><div class="cpp-7d-value">${fmt$(w.cpp)}</div>${vsHtml}`;
+        }
+      }
+    }).catch(() => {
+      document.querySelectorAll('[id^="7d-"]').forEach(el => {
+        el.innerHTML = `<div class="cpp-7d-label">7D Avg</div><div class="cpp-7d-value" style="color:var(--text-dim);">—</div>`;
+      });
+    });
+
   } catch (e) {
     document.getElementById('client-list').innerHTML =
       `<div class="loading-row" style="color:var(--red);">Error: ${e.message}</div>`;
     document.getElementById('heading-meta').textContent = 'Failed to load';
-  } finally {
     btn.disabled = false;
     btn.textContent = 'Refresh';
   }
 }
 
 function render(rows) {
-  // Update heading with date from first valid result
   const firstValid = rows.find(r => r.date);
   if (firstValid) {
     const d = new Date(firstValid.date + 'T12:00:00');
@@ -343,7 +411,6 @@ function render(rows) {
   document.getElementById('heading-meta').textContent =
     'Updated ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-  // Summary
   const valid = rows.filter(r => !r.error);
   const totalSpend = valid.reduce((s, r) => s + (r.spend || 0), 0);
   const totalPurchases = valid.reduce((s, r) => s + (r.purchases || 0), 0);
@@ -355,12 +422,10 @@ function render(rows) {
   document.getElementById('footer-summary').style.display = 'flex';
 
   if (!rows.length) {
-    document.getElementById('client-list').innerHTML =
-      `<div class="loading-row">No sticker clients found.</div>`;
+    document.getElementById('client-list').innerHTML = `<div class="loading-row">No sticker clients found.</div>`;
     return;
   }
 
-  // Sort: errors last, then by CPP descending
   rows.sort((a, b) => {
     if (a.error && !b.error) return 1;
     if (!a.error && b.error) return -1;
@@ -390,8 +455,12 @@ function render(rows) {
           <div class="sub-value">${fmtInt(row.purchases)}</div>
         </div>
         <div class="cpp-block">
-          <div class="cpp-number ${cls}">${row.cpp != null ? fmt$(row.cpp) : '—'}</div>
+          <div class="cpp-number ${cls}" id="cpp-${row.id}" data-cpp="${row.cpp ?? ''}">${row.cpp != null ? fmt$(row.cpp) : '—'}</div>
           ${delta ? `<div class="cpp-delta ${cls}">${delta}</div>` : ''}
+        </div>
+        <div class="cpp-7d-block" id="7d-${row.id}">
+          <div class="cpp-7d-label">7D Avg</div>
+          <div class="cpp-7d-loading">loading...</div>
         </div>
       </div>
     </div>`;
