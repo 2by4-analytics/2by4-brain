@@ -70,7 +70,7 @@ export async function runMorningBriefing(targetClientIds = null) {
   const allClients = await fetchClients();
 
   const activeClients = Object.entries(allClients)
-    .filter(([id]) => targetClientIds ? targetClientIds.includes(id) : id === 'client1')
+    .filter(([id]) => targetClientIds ? targetClientIds.includes(id) : true)
     .map(([id, config]) => ({ id, config }));
 
   const clientBriefings = [];
