@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchClients } from '../config/clients.js';
+import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -24,43 +25,81 @@ Meta + Google Ads. Stack: WordPress, GoHighLevel, Tag Manager.
 - Checkout at apply.plant-enthusiast.com/Approved
 - $3 single decal or $8 for 3. Order bumps: $1 last decal, $14.95/mo continuity (THE offer), $7 planner, $3.95 rush
 
-## Your Capabilities
-1. CPA Monitor — pull performance data, analyze CPP vs targets
-2. Creative Generator — ad copy and image prompts
-3. Campaign Analyst — trend analysis
-4. Reporter — assemble briefings
-5. Onboarding Agent — add new clients
+## Tools Available
+You have tools to pull live data. Use them proactively — don't tell Alan you need data, just go get it.
+- get_performance: pull one client's data for a time period
+- get_all_performance: pull all clients at once
+- get_briefing: get today's morning briefing
 
 ## Style
 - Be concise. Alan is busy.
 - Use numbers. Be specific.
+- Pull data first, then answer — never say you can't access data.
 - Surface the most important thing first.
 - Never pad with generic advice.`;
 
 export async function chatWithBrain(messages, clientContext = null) {
+  const allClients = await fetchClients();
+
   let systemPrompt = BRAIN_SYSTEM_PROMPT;
 
   if (clientContext) {
-    systemPrompt += `\n\n## Current Working Context\nAlan is focused on: ${clientContext.name} (${clientContext.type}). CPP target: $${clientContext.cppTarget}.`;
+    systemPrompt += `\n\n## Current Working Context\nAlan is focused on: ${clientContext.name} (${clientContext.type}). Client ID: ${clientContext.id}. CPP target: $${clientContext.cppTarget}.`;
   } else {
-    // Inject live client list
-    try {
-      const clients = await fetchClients();
-      const clientList = Object.entries(clients)
-        .map(([id, c]) => `- ${c.name} (${id}) — ${c.type}, CPP target $${c.cppTarget}`)
-        .join('\n');
-      systemPrompt += `\n\n## Current Clients\n${clientList}`;
-    } catch (e) {
-      console.error('[Dispatcher] Failed to load clients:', e.message);
-    }
+    const clientList = Object.entries(allClients)
+      .map(([id, c]) => `- ${c.name} (id: ${id}) — ${c.type}, CPP target $${c.cppTarget}`)
+      .join('\n');
+    systemPrompt += `\n\n## Current Clients\n${clientList}`;
   }
 
-  const response = await client.messages.create({
-    model: 'claude-opus-4-5',
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages: messages.map(m => ({ role: m.role, content: m.content }))
-  });
+  // Agentic loop — Brain can call tools multiple times before responding
+  const agentMessages = [...messages];
+  
+  while (true) {
+    const response = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 2048,
+      system: systemPrompt,
+      tools: TOOL_DEFINITIONS,
+      messages: agentMessages
+    });
 
-  return response.content[0].text;
+    // If Brain wants to use a tool
+    if (response.stop_reason === 'tool_use') {
+      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
+      
+      // Add Brain's response (with tool calls) to message history
+      agentMessages.push({ role: 'assistant', content: response.content });
+
+      // Execute all tool calls and collect results
+      const toolResults = await Promise.all(
+        toolUseBlocks.map(async (toolUse) => {
+          console.log(`[Brain] Calling tool: ${toolUse.name}`, toolUse.input);
+          try {
+            const result = await executeTool(toolUse.name, toolUse.input, allClients);
+            return {
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: JSON.stringify(result)
+            };
+          } catch (err) {
+            return {
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              is_error: true,
+              content: err.message
+            };
+          }
+        })
+      );
+
+      // Add tool results to message history and loop
+      agentMessages.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    // Brain is done — return the text response
+    const textBlock = response.content.find(b => b.type === 'text');
+    return textBlock?.text || 'No response';
+  }
 }
