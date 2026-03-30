@@ -1,4 +1,5 @@
 import { runCreativeGenerator } from '../agents/creative-gen.js';
+import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 
@@ -92,6 +93,24 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['clientId', 'brief']
     }
+  },
+  {
+    name: 'analyze_creatives',
+    description: 'Analyze all active Meta ads for a client — scores each creative, flags ads as SCALE/MONITOR/PAUSE, and identifies copy and visual patterns driving performance. Use when Alan asks to review creatives, audit ads, identify what to scale or pause, or understand what is and isn\'t working.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: {
+          type: 'string',
+          description: 'The client ID (e.g. client1, eric-faith-mncg09ih)'
+        },
+        days: {
+          type: 'number',
+          description: 'Number of days of performance data to use (default 7)'
+        }
+      },
+      required: ['clientId']
+    }
   }
 ];
 
@@ -145,6 +164,15 @@ export async function executeTool(name, input, allClients) {
         brief: input.brief
       });
       return { clientId: input.clientId, clientName: clientConfig.name, ...creative };
+    }
+
+    case 'analyze_creatives': {
+      const clientConfig = allClients[input.clientId];
+      if (!clientConfig) throw new Error(`Unknown client: ${input.clientId}`);
+      return await runCreativeAnalyst({
+        clientId: input.clientId,
+        days: input.days || 7,
+      });
     }
 
     default:
