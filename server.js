@@ -62,6 +62,44 @@ app.get('/api/clients-list', auth, async (req, res) => {
   }
 });
 
+// CPP daily snapshot — all sticker clients, yesterday in their ad account timezone
+app.get('/api/cpp-daily', auth, async (req, res) => {
+  try {
+    const clients = await fetchClients();
+    const sticker = Object.entries(clients).filter(([, c]) => c.type === 'sticker');
+
+    const results = await Promise.allSettled(sticker.map(async ([id, c]) => {
+      const tz = c.adAccounts?.[0]?.timezone || 'America/Chicago';
+      const tzDate = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+      tzDate.setDate(tzDate.getDate() - 1);
+      const date = tzDate.toISOString().split('T')[0];
+
+      const url = `${process.env.DASHBOARD_URL}/api/dashboard/${id}?startDate=${date}&endDate=${date}`;
+      const r = await fetch(url, { headers: { 'x-dash-password': process.env.DASH_PASSWORD } });
+      if (!r.ok) throw new Error(`Dashboard error: ${r.status}`);
+      const data = await r.json();
+
+      // Extract spend + purchases — handle flat object or array of campaigns
+      let spend = 0, purchases = 0;
+      const rows = Array.isArray(data) ? data : data.campaigns || data.adSets || data.ads || [data];
+      for (const row of rows) {
+        spend     += Number(row.spend     ?? row.totalSpend     ?? 0);
+        purchases += Number(row.purchases ?? row.totalPurchases ?? row.actions?.purchase ?? 0);
+      }
+      const cpp = purchases > 0 ? spend / purchases : null;
+
+      return { id, name: c.name, date, tz, spend, purchases, cpp, cppTarget: c.cppTarget };
+    }));
+
+    res.json(results.map((r, i) => r.status === 'fulfilled'
+      ? r.value
+      : { id: sticker[i][0], name: sticker[i][1].name, error: r.reason?.message }
+    ));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Manual trigger for morning briefing (for testing)
 app.post('/api/briefing/run', auth, async (req, res) => {
   try {
