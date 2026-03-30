@@ -1,6 +1,8 @@
 import { runCreativeGenerator } from '../agents/creative-gen.js';
 import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
+import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
+import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 
@@ -114,6 +116,38 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'run_performance_analysis',
+    description: 'Run a live Meta ads performance analysis for a sticker funnel client — evaluates every active ad against CPP target, CPL ($1–$2), and CTR (3%+). Flags each ad SCALE/MONITOR/PAUSE/INVESTIGATE with specific diagnosis. Use when Alan asks how ads are performing, what to pause, what to scale, or wants a numbers breakdown.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: {
+          type: 'string',
+          description: 'The client ID — resolve from client name using the mapping in the system prompt (e.g. "Eric - Plants" → client1, "Faith" → eric-faith-mncg09ih)'
+        },
+        days: {
+          type: 'number',
+          description: 'Number of days of data to analyze (default 1 = yesterday, use 7 for weekly view)'
+        }
+      },
+      required: ['clientId']
+    }
+  },
+  {
+    name: 'get_performance_analysis',
+    description: 'Retrieve the most recent stored performance analysis for a client without re-running. Use when Alan wants to review the latest analysis or reference yesterday\'s results.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: {
+          type: 'string',
+          description: 'The client ID — resolve from client name using the mapping in the system prompt'
+        }
+      },
+      required: ['clientId']
+    }
+  },
+  {
     name: 'get_creative_analysis',
     description: 'Retrieve the most recent stored creative analysis for a client without re-running the pipeline. Use when Alan asks to see the latest creative analysis, review scores, or check what was flagged for a client.',
     input_schema: {
@@ -188,6 +222,21 @@ export async function executeTool(name, input, allClients) {
         clientId: input.clientId,
         days: input.days || 7,
       });
+    }
+
+    case 'run_performance_analysis': {
+      const clientConfig = allClients[input.clientId];
+      if (!clientConfig) throw new Error(`Unknown client: ${input.clientId}`);
+      return await runPerformanceAnalyst({
+        clientId: input.clientId,
+        days: input.days || 1,
+      });
+    }
+
+    case 'get_performance_analysis': {
+      const analysis = await getLatestPerformanceAnalysis(input.clientId);
+      if (!analysis) return { message: `No stored performance analysis found for ${input.clientId}. Use run_performance_analysis to generate one.` };
+      return analysis;
     }
 
     case 'get_creative_analysis': {

@@ -99,6 +99,16 @@ function extractPurchases(actions = []) {
   return match ? parseInt(match.value) : 0;
 }
 
+function extractLeads(actions = []) {
+  const match = actions.find(a => a.action_type === 'lead');
+  return match ? parseInt(match.value) : 0;
+}
+
+function extractCPL(costPerAction = []) {
+  const match = costPerAction.find(a => a.action_type === 'lead');
+  return match ? parseFloat(match.value) : null;
+}
+
 function toDateStr(date) {
   return date.toISOString().split('T')[0];
 }
@@ -190,5 +200,78 @@ export async function getAdCreatives(clientId, days = 7) {
     cppTarget: client.cppTarget,
     days,
     ads: merged,
+  };
+}
+
+/**
+ * Fetch ad-level performance metrics for analysis.
+ * Pulls spend, leads (Lead pixel event), purchases, CTR, CPC, CPM, CPL, CPP
+ * at the individual ad level with campaign and adset context.
+ *
+ * Returns: { clientId, clientName, cppTarget, days, ads: [...] }
+ */
+export async function getAdPerformance(clientId, days = 1) {
+  const clients = await fetchClients();
+  const client = clients[clientId];
+
+  if (!client) throw new Error(`Unknown client: ${clientId}`);
+  if (!client.metaAccountId) {
+    throw new Error(`No Meta ad account configured for ${client.name}.`);
+  }
+
+  const accountId = client.metaAccountId;
+  console.log(`[Meta] getAdPerformance — client=${clientId} account=${accountId} days=${days}`);
+
+  const datePreset = DATE_PRESETS[days];
+  const insightDateParam = datePreset
+    ? { date_preset: datePreset }
+    : (() => {
+        const until = new Date();
+        const since = new Date();
+        since.setDate(until.getDate() - days);
+        return { time_range: { since: toDateStr(since), until: toDateStr(until) } };
+      })();
+
+  const rows = await paginate(`${accountId}/insights`, {
+    fields: 'ad_id,ad_name,campaign_id,campaign_name,adset_id,adset_name,spend,impressions,clicks,ctr,cpc,cpm,actions,cost_per_action_type',
+    level: 'ad',
+    ...insightDateParam,
+    limit: 100,
+  });
+  console.log(`[Meta] Fetched ${rows.length} ad performance rows for ${clientId}`);
+
+  const ads = rows.map(row => {
+    const spend = parseFloat(row.spend || 0);
+    const leads = extractLeads(row.actions);
+    const purchases = extractPurchases(row.actions);
+    const cpl = extractCPL(row.cost_per_action_type);
+    const cpp = purchases > 0 ? spend / purchases : null;
+
+    return {
+      ad_id: row.ad_id,
+      ad_name: row.ad_name,
+      campaign_id: row.campaign_id,
+      campaign_name: row.campaign_name,
+      adset_id: row.adset_id,
+      adset_name: row.adset_name,
+      spend,
+      impressions: parseInt(row.impressions || 0),
+      clicks: parseInt(row.clicks || 0),
+      ctr: parseFloat(row.ctr || 0),
+      cpc: parseFloat(row.cpc || 0),
+      cpm: parseFloat(row.cpm || 0),
+      leads,
+      cpl,
+      purchases,
+      cpp,
+    };
+  });
+
+  return {
+    clientId,
+    clientName: client.name,
+    cppTarget: client.cppTarget,
+    days,
+    ads,
   };
 }
