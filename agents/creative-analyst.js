@@ -15,7 +15,8 @@ async function downloadBase64(url) {
     const type = supported.includes(mediaType) ? mediaType : 'image/jpeg';
     const buffer = await res.arrayBuffer();
     return { base64: Buffer.from(buffer).toString('base64'), mediaType: type };
-  } catch {
+  } catch (err) {
+    console.warn(`[CreativeAnalyst] Failed to download thumbnail ${url}:`, err.message);
     return null;
   }
 }
@@ -49,7 +50,13 @@ Flag definitions:
 Always return valid JSON only — no markdown, no explanation outside the JSON.`;
 
 export async function runCreativeAnalyst({ clientId, days = 7 }) {
-  const result = await getAdCreatives(clientId, days);
+  let result;
+  try {
+    result = await getAdCreatives(clientId, days);
+  } catch (err) {
+    console.error(`[CreativeAnalyst] getAdCreatives failed for ${clientId}:`, err.message);
+    throw err; // re-throw with full message intact — do not genericize
+  }
   const { clientName, cppTarget, ads } = result;
 
   if (!ads.length) {

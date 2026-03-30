@@ -15,16 +15,43 @@ function token() {
   return t;
 }
 
+function redactToken(urlStr) {
+  return urlStr.replace(/access_token=[^&]+/, 'access_token=REDACTED');
+}
+
 async function fbGet(path, params = {}) {
   const url = new URL(`${FB_BASE}/${path}`);
   url.searchParams.set('access_token', token());
   for (const [k, v] of Object.entries(params)) {
-    // Objects (e.g. time_range) must be JSON-encoded; primitives passed as-is
     url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
+
+  const redactedUrl = redactToken(url.toString());
+  console.log(`[Meta] GET ${redactedUrl}`);
+
   const res = await fetch(url.toString());
   const data = await res.json();
-  if (data.error) throw new Error(`Meta API (${data.error.code}): ${data.error.message}`);
+
+  if (data.error) {
+    const e = data.error;
+    console.error('[Meta] API error:', {
+      url: redactedUrl,
+      code: e.code,
+      error_subcode: e.error_subcode ?? null,
+      type: e.type ?? null,
+      message: e.message,
+      fbtrace_id: e.fbtrace_id ?? null,
+    });
+    const detail = [
+      `code=${e.code}`,
+      e.error_subcode != null ? `subcode=${e.error_subcode}` : null,
+      e.type ? `type=${e.type}` : null,
+      `message="${e.message}"`,
+      e.fbtrace_id ? `fbtrace_id=${e.fbtrace_id}` : null,
+    ].filter(Boolean).join(' | ');
+    throw new Error(`Meta API error — ${detail} — URL: ${redactedUrl}`);
+  }
+
   return data;
 }
 
@@ -32,12 +59,35 @@ async function paginate(path, params = {}) {
   const all = [];
   let data = await fbGet(path, params);
   all.push(...(data.data || []));
+
+  let page = 1;
   while (data.paging?.next) {
+    page++;
     const res = await fetch(data.paging.next);
     data = await res.json();
-    if (data.error) break;
+
+    if (data.error) {
+      const e = data.error;
+      const redactedNext = redactToken(data.paging?.next ?? 'unknown');
+      console.error(`[Meta] Pagination error on page ${page}:`, {
+        url: redactedNext,
+        code: e.code,
+        error_subcode: e.error_subcode ?? null,
+        type: e.type ?? null,
+        message: e.message,
+        fbtrace_id: e.fbtrace_id ?? null,
+      });
+      const detail = [
+        `code=${e.code}`,
+        e.error_subcode != null ? `subcode=${e.error_subcode}` : null,
+        `message="${e.message}"`,
+      ].filter(Boolean).join(' | ');
+      throw new Error(`Meta API pagination error (page ${page}) — ${detail}`);
+    }
+
     all.push(...(data.data || []));
   }
+
   return all;
 }
 
@@ -77,6 +127,7 @@ export async function getAdCreatives(clientId, days = 7) {
   }
 
   const accountId = client.metaAccountId;
+  console.log(`[Meta] getAdCreatives — client=${clientId} account=${accountId} days=${days}`);
 
   // Use a known valid date_preset if days matches, otherwise build an explicit time_range
   const datePreset = DATE_PRESETS[days];
@@ -90,12 +141,12 @@ export async function getAdCreatives(clientId, days = 7) {
       })();
 
   // ── Request 1: active ads with creative details ───────────────────────────
-  // status must be passed as a plain string array value, not double-encoded
   const ads = await paginate(`${accountId}/ads`, {
     fields: 'id,name,creative{id,title,body,thumbnail_url,image_url}',
     effective_status: JSON.stringify(['ACTIVE']),
     limit: 100,
   });
+  console.log(`[Meta] Fetched ${ads.length} active ads for ${clientId}`);
 
   // ── Request 2: ad-level insights ─────────────────────────────────────────
   const insightRows = await paginate(`${accountId}/ads/insights`, {
@@ -104,6 +155,7 @@ export async function getAdCreatives(clientId, days = 7) {
     ...insightDateParam,
     limit: 100,
   });
+  console.log(`[Meta] Fetched ${insightRows.length} insight rows for ${clientId}`);
 
   // Build lookup by ad_id
   const byAdId = {};
