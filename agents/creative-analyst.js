@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getAdCreatives } from '../meta/index.js';
 import { runCreativeGenerator } from './creative-gen.js';
+import { saveCreativeAnalysis } from '../store/creative-analyses.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -142,7 +143,7 @@ export async function runCreativeAnalyst({ clientId, days = 7 }) {
     }
   }
 
-  return {
+  const result = {
     clientId,
     clientName,
     cppTarget,
@@ -151,4 +152,8 @@ export async function runCreativeAnalyst({ clientId, days = 7 }) {
     ...analysis,
     new_concepts,
   };
+
+  await saveCreativeAnalysis(clientId, result);
+
+  return result;
 }

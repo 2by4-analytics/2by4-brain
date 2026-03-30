@@ -42,7 +42,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         clientId: {
           type: 'string',
-          description: 'The client ID from the dashboard (e.g. client1, eric-faith-mncg09ih)'
+          description: 'The client ID — resolve from client name using the mapping in the system prompt (e.g. "Eric - Plants" → client1, "Faith" → eric-faith-mncg09ih)'
         },
         period: {
           type: 'string',
