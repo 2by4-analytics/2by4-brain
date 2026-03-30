@@ -1,3 +1,5 @@
+import { runCreativeGenerator } from '../agents/creative-gen.js';
+
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 
 async function dashFetch(path) {
@@ -72,6 +74,24 @@ export const TOOL_DEFINITIONS = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: 'run_creative_generator',
+    description: 'Generate Meta ad creative for a sticker funnel client — 3 hook variations, 3 primary text variations, and an image prompt. Use when Alan asks for ad copy, hooks, creative ideas, or wants to generate ads for a client.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: {
+          type: 'string',
+          description: 'The client ID (e.g. client1, eric-faith-mncg09ih)'
+        },
+        brief: {
+          type: 'string',
+          description: 'Creative brief — describe the angle, audience insight, offer focus, or any specific direction Alan wants'
+        }
+      },
+      required: ['clientId', 'brief']
+    }
   }
 ];
 
@@ -114,6 +134,17 @@ export async function executeTool(name, input, allClients) {
       const res = await fetch('/api/briefing/latest');
       const data = await res.json();
       return data.empty ? { message: 'No briefing available yet' } : data;
+    }
+
+    case 'run_creative_generator': {
+      const clientConfig = allClients[input.clientId];
+      if (!clientConfig) throw new Error(`Unknown client: ${input.clientId}`);
+      const creative = await runCreativeGenerator({
+        clientId: input.clientId,
+        clientName: clientConfig.name,
+        brief: input.brief
+      });
+      return { clientId: input.clientId, clientName: clientConfig.name, ...creative };
     }
 
     default:
