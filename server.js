@@ -79,32 +79,13 @@ app.get('/api/cpp-daily', auth, async (req, res) => {
       if (!r.ok) throw new Error(`Dashboard error: ${r.status}`);
       const data = await r.json();
 
-      // Log shape once so we can confirm field names
-      console.log(`[CPP Daily] ${id} raw keys:`, JSON.stringify(Object.keys(Array.isArray(data) ? (data[0] || {}) : data)).slice(0, 200));
-
-      // Extract account-level spend + purchases.
-      // Priority: top-level summary fields → actions array → sum over campaign rows.
+      // Response shape: { adAccounts: [{ fbSpend, cocTotals: { sales, ... } }] }
+      // Sum across all ad accounts for the client's total
       let spend = 0, purchases = 0;
-
-      const topSpend = data.spend ?? data.totalSpend ?? data.amount_spent;
-      const topPurchases = data.purchases ?? data.totalPurchases
-        ?? data.actions?.find?.(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase')?.value
-        ?? data.conversions;
-
-      if (topSpend != null && topPurchases != null) {
-        spend = Number(topSpend);
-        purchases = Number(topPurchases);
-      } else {
-        const rows = Array.isArray(data) ? data : data.campaigns || data.adSets || data.ads || [];
-        for (const row of rows) {
-          spend += Number(row.spend ?? row.totalSpend ?? row.amount_spent ?? 0);
-          const p = row.purchases ?? row.totalPurchases
-            ?? row.actions?.find?.(a => a.action_type === 'purchase' || a.action_type === 'offsite_conversion.fb_pixel_purchase')?.value
-            ?? 0;
-          purchases += Number(p);
-        }
+      for (const account of data.adAccounts || []) {
+        spend     += account.fbSpend || 0;
+        purchases += account.cocTotals?.sales || 0;
       }
-
       const cpp = purchases > 0 ? spend / purchases : null;
       return { id, name: c.name, date, tz, spend, purchases, cpp, cppTarget: c.cppTarget };
     }));
