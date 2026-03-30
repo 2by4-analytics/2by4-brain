@@ -68,7 +68,7 @@ export async function runMorningBriefing() {
 
   // Phase 1: Plant client only. Later: all clients.
   const activeClients = [
-    { id: 'eric-plant', config: CLIENTS['eric-plant'] }
+    { id: 'client1', config: CLIENTS['client1'] }
     // Future: Object.entries(CLIENTS).filter(([,c]) => c.active).map(([id, config]) => ({ id, config }))
   ];
 
