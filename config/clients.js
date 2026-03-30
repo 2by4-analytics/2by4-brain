@@ -1,81 +1,42 @@
-export const CLIENTS = {
-  'client1': {
-    name: 'Eric / Plant',
-    type: 'sticker',
-    niche: 'houseplant',
-    cppTarget: 18,
-    dailySpend: 4000,
-    platform: ['meta'],
-    active: true
-  },
-  'client1-faith': {
-    name: 'Eric / Faith',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'client2': {
-    name: 'Jorge',
-    type: 'sticker',
-    cppTarget: 18,
-    platform: ['meta'],
-    active: true
-  },
-  'brian-mm0ufx84': {
-    name: 'Brian',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'matteo-mm0urlzh': {
-    name: 'Matteo',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'todd-mn3cd22p': {
-    name: 'Todd',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'coco-vm-mn7htjvz': {
-    name: 'Coco - VM',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'coco-black-wolf-mn7hvdev': {
-    name: 'Coco - Black Wolf',
-    type: 'sticker',
-    cppTarget: 25,
-    platform: ['meta'],
-    active: true
-  },
-  'craig-revmoto-mmjeuw8s': {
-    name: 'Craig-RevMoto',
-    type: 'shed',
-    cppTarget: 25,
-    platform: ['meta', 'google'],
-    stack: ['wordpress', 'gohighlevel', 'tagmanager'],
-    active: true
-  },
-  'craig-readynation-mmkodtu2': {
-    name: 'Craig-ReadyNation',
-    type: 'shed',
-    cppTarget: 25,
-    platform: ['meta', 'google'],
-    stack: ['wordpress', 'gohighlevel', 'tagmanager'],
-    active: true
-  }
-};
+let cachedClients = null;
 
-export const CLIENT_TYPES = {
-  sticker: Object.entries(CLIENTS).filter(([, c]) => c.type === 'sticker').map(([id, c]) => ({ id, ...c })),
-  shed: Object.entries(CLIENTS).filter(([, c]) => c.type === 'shed').map(([id, c]) => ({ id, ...c }))
-};
+const SHED_IDS = ['craig-revmoto-mmjeuw8s', 'craig-readynation-mmkodtu2'];
+
+function normalizeClients(rawClients) {
+  const clients = {};
+  for (const c of rawClients) {
+    const isShed = SHED_IDS.includes(c.id);
+    clients[c.id] = {
+      name: c.name,
+      type: isShed ? 'shed' : 'sticker',
+      cppTarget: c.adAccounts?.[0]?.cppTarget || 18,
+      platform: isShed ? ['meta', 'google'] : ['meta'],
+      adAccounts: c.adAccounts || [],
+      active: true
+    };
+  }
+  return clients;
+}
+
+export async function fetchClients() {
+  if (cachedClients) return cachedClients;
+  const res = await fetch(`${process.env.DASHBOARD_URL}/api/clients`, {
+    headers: { 'x-dash-password': process.env.DASH_PASSWORD }
+  });
+  if (!res.ok) throw new Error(`Failed to fetch clients: ${res.status}`);
+  const data = await res.json();
+  cachedClients = normalizeClients(data.clients || data);
+  console.log(`[Clients] Loaded ${Object.keys(cachedClients).length} clients`);
+  return cachedClients;
+}
+
+export function clearClientCache() {
+  cachedClients = null;
+}
+
+export function getClientTypes(clients) {
+  return {
+    sticker: Object.entries(clients).filter(([, c]) => c.type === 'sticker').map(([id, c]) => ({ id, ...c })),
+    shed: Object.entries(clients).filter(([, c]) => c.type === 'shed').map(([id, c]) => ({ id, ...c }))
+  };
+}
