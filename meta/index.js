@@ -2,6 +2,13 @@ import { fetchClients } from '../config/clients.js';
 
 const FB_BASE = 'https://graph.facebook.com/v19.0';
 
+// Valid Meta date presets for the days values we support
+const DATE_PRESETS = {
+  7:  'last_7d',
+  14: 'last_14d',
+  30: 'last_30d',
+};
+
 function token() {
   const t = process.env.META_ACCESS_TOKEN;
   if (!t) throw new Error('META_ACCESS_TOKEN environment variable not set');
@@ -12,6 +19,7 @@ async function fbGet(path, params = {}) {
   const url = new URL(`${FB_BASE}/${path}`);
   url.searchParams.set('access_token', token());
   for (const [k, v] of Object.entries(params)) {
+    // Objects (e.g. time_range) must be JSON-encoded; primitives passed as-is
     url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
   const res = await fetch(url.toString());
@@ -41,10 +49,20 @@ function extractPurchases(actions = []) {
   return match ? parseInt(match.value) : 0;
 }
 
+function toDateStr(date) {
+  return date.toISOString().split('T')[0];
+}
+
 /**
- * Fetch all active ads for a client with 7-day performance metrics.
+ * Fetch all active ads for a client with performance metrics.
+ *
+ * Two separate requests (Meta requirement):
+ *   1. /{accountId}/ads           — creative fields (name, headline, body, thumbnail)
+ *   2. /{accountId}/ads/insights  — metrics at ad level (spend, purchases, ctr, cpc)
+ *
  * Returns: { clientId, clientName, cppTarget, days, ads: [...] }
- * Each ad: { ad_id, ad_name, headline, primary_text, thumbnail_url, spend, purchases, cpp, ctr, cpc }
+ * Each ad: { ad_id, ad_name, headline, primary_text, thumbnail_url,
+ *            spend, purchases, cpp, ctr, cpc }
  */
 export async function getAdCreatives(clientId, days = 7) {
   const clients = await fetchClients();
@@ -59,20 +77,31 @@ export async function getAdCreatives(clientId, days = 7) {
   }
 
   const accountId = client.metaAccountId;
-  const datePreset = `last_${days}_days`;
 
-  // Active ads with creative details
+  // Use a known valid date_preset if days matches, otherwise build an explicit time_range
+  const datePreset = DATE_PRESETS[days];
+  const insightDateParam = datePreset
+    ? { date_preset: datePreset }
+    : (() => {
+        const until = new Date();
+        const since = new Date();
+        since.setDate(until.getDate() - days);
+        return { time_range: { since: toDateStr(since), until: toDateStr(until) } };
+      })();
+
+  // ── Request 1: active ads with creative details ───────────────────────────
+  // status must be passed as a plain string array value, not double-encoded
   const ads = await paginate(`${accountId}/ads`, {
     fields: 'id,name,creative{id,title,body,thumbnail_url,image_url}',
-    status: JSON.stringify(['ACTIVE']),
+    effective_status: JSON.stringify(['ACTIVE']),
     limit: 100,
   });
 
-  // Ad-level insights for the date range
-  const insightRows = await paginate(`${accountId}/insights`, {
+  // ── Request 2: ad-level insights ─────────────────────────────────────────
+  const insightRows = await paginate(`${accountId}/ads/insights`, {
+    fields: 'ad_id,ad_name,spend,actions,cost_per_action_type,ctr,cpc',
     level: 'ad',
-    fields: 'ad_id,spend,actions,ctr,cpc',
-    date_preset: datePreset,
+    ...insightDateParam,
     limit: 100,
   });
 
