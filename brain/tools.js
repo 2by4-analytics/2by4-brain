@@ -1,5 +1,6 @@
 import { runCreativeGenerator } from '../agents/creative-gen.js';
 import { runCreativeAnalyst } from '../agents/creative-analyst.js';
+import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 
@@ -111,6 +112,20 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['clientId']
     }
+  },
+  {
+    name: 'get_creative_analysis',
+    description: 'Retrieve the most recent stored creative analysis for a client without re-running the pipeline. Use when Alan asks to see the latest creative analysis, review scores, or check what was flagged for a client.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: {
+          type: 'string',
+          description: 'The client ID (e.g. client1, eric-faith-mncg09ih)'
+        }
+      },
+      required: ['clientId']
+    }
   }
 ];
 
@@ -173,6 +188,12 @@ export async function executeTool(name, input, allClients) {
         clientId: input.clientId,
         days: input.days || 7,
       });
+    }
+
+    case 'get_creative_analysis': {
+      const analysis = await getLatestCreativeAnalysis(input.clientId);
+      if (!analysis) return { message: `No stored creative analysis found for ${input.clientId}. Use analyze_creatives to run a fresh analysis.` };
+      return analysis;
     }
 
     default:

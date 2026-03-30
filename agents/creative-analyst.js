@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getAdCreatives } from '../meta/index.js';
+import { runCreativeGenerator } from './creative-gen.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -123,6 +124,24 @@ export async function runCreativeAnalyst({ clientId, days = 7 }) {
 
   const analysis = JSON.parse(jsonText);
 
+  // Close the loop: if there are PAUSE ads and winning patterns, generate new concepts
+  let new_concepts = null;
+  const pauseCount = analysis.ads?.filter(a => a.flag === 'PAUSE').length ?? 0;
+  const winningPatterns = analysis.patterns?.winning;
+  if (pauseCount >= 1 && winningPatterns) {
+    try {
+      const brief = `Based on winning creative patterns: ${winningPatterns}. ` +
+        `Copy themes driving performance: ${analysis.patterns?.copy_patterns || 'N/A'}. ` +
+        `Visual patterns that work: ${analysis.patterns?.visual_patterns || 'N/A'}. ` +
+        `Generate new concepts that double down on what's working.`;
+      console.log(`[CreativeAnalyst] ${pauseCount} PAUSE ad(s) found — generating new concepts for ${clientId}`);
+      new_concepts = await runCreativeGenerator({ clientId, clientName, brief });
+    } catch (err) {
+      console.warn(`[CreativeAnalyst] Creative gen failed for ${clientId}:`, err.message);
+      new_concepts = null;
+    }
+  }
+
   return {
     clientId,
     clientName,
@@ -130,5 +149,6 @@ export async function runCreativeAnalyst({ clientId, days = 7 }) {
     days,
     adsAnalyzed: ads.length,
     ...analysis,
+    new_concepts,
   };
 }

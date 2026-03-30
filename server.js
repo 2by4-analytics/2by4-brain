@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import cron from 'node-cron';
 import { runMorningBriefing } from './scheduler/index.js';
+import { initCreativeScheduler } from './scheduler/creative-scheduler.js';
 import { chatWithBrain } from './brain/dispatcher.js';
 import { getLatestBriefing, getAllBriefings } from './store/briefings.js';
 import { fetchClients, clearClientCache } from './config/clients.js';
@@ -77,6 +78,8 @@ cron.schedule('0 7 * * *', async () => {
   console.log('[Scheduler] Running morning briefing...');
   await runMorningBriefing();
 }, { timezone: 'America/Chicago' });
+
+initCreativeScheduler();
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

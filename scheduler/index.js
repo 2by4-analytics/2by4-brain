@@ -98,6 +98,7 @@ export async function runMorningBriefing(targetClientIds = null) {
         error: err.message
       });
     }
+    await new Promise(r => setTimeout(r, 2000));
   }
 
   const briefing = await saveBriefing({
