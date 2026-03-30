@@ -25,13 +25,23 @@ async function fbGet(path, params = {}) {
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
   }
-
   const redactedUrl = redactToken(url.toString());
   console.log(`[Meta] GET ${redactedUrl}`);
 
-  const res = await fetch(url.toString());
-  const data = await res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
 
+  let res;
+  try {
+    res = await fetch(url.toString(), { signal: controller.signal });
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error(`Meta API timed out after 25s — URL: ${redactedUrl}`);
+    throw err;
+  }
+  clearTimeout(timeout);
+
+  const data = await res.json();
   if (data.error) {
     const e = data.error;
     console.error('[Meta] API error:', {
@@ -51,7 +61,6 @@ async function fbGet(path, params = {}) {
     ].filter(Boolean).join(' | ');
     throw new Error(`Meta API error — ${detail} — URL: ${redactedUrl}`);
   }
-
   return data;
 }
 
