@@ -114,7 +114,14 @@ app.get('/api/cpp-7day', auth, async (req, res) => {
       const end = endDate.toISOString().split('T')[0];
 
       const url = `${process.env.DASHBOARD_URL}/api/dashboard/${id}?startDate=${start}&endDate=${end}`;
-      const r = await fetch(url, { headers: { 'x-dash-password': process.env.DASH_PASSWORD } });
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), 90000);
+      let r;
+      try {
+        r = await fetch(url, { headers: { 'x-dash-password': process.env.DASH_PASSWORD }, signal: abort.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!r.ok) throw new Error(`Dashboard error: ${r.status}`);
       const data = await r.json();
 
