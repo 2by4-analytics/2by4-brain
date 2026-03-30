@@ -52,14 +52,14 @@ Flag definitions:
 Always return valid JSON only — no markdown, no explanation outside the JSON.`;
 
 export async function runCreativeAnalyst({ clientId, days = 7 }) {
-  let result;
+  let creativeData;
   try {
-    result = await getAdCreatives(clientId, days);
+    creativeData = await getAdCreatives(clientId, days);
   } catch (err) {
     console.error(`[CreativeAnalyst] getAdCreatives failed for ${clientId}:`, err.message);
     throw err; // re-throw with full message intact — do not genericize
   }
-  const { clientName, cppTarget, ads } = result;
+  const { clientName, cppTarget, ads } = creativeData;
 
   if (!ads.length) {
     return { clientId, clientName, cppTarget, days, adsAnalyzed: 0, ads: [], patterns: null, summary: 'No active ads found.' };
