@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import { runMorningBriefing } from './scheduler/index.js';
 import { chatWithBrain } from './brain/dispatcher.js';
 import { getLatestBriefing, getAllBriefings } from './store/briefings.js';
+import { fetchClients, clearClientCache } from './config/clients.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -46,6 +47,16 @@ app.get('/api/briefing/history', auth, async (req, res) => {
   try {
     const history = await getAllBriefings(30);
     res.json(history);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/clients-list', auth, async (req, res) => {
+  try {
+    clearClientCache();
+    const clients = await fetchClients();
+    res.json(clients);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
