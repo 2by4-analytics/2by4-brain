@@ -9,6 +9,7 @@ function normalizeClients(rawClients) {
     clients[c.id] = {
       name: c.name,
       type: isShed ? 'shed' : 'sticker',
+      timezone: c.timezone || 'America/Chicago',
       cppTarget: c.adAccounts?.[0]?.cppTarget || 18,
       metaAccountId: c.adAccounts?.[0]?.fbAdAccountId || null, // e.g. "act_123456789"
       platform: isShed ? ['meta', 'google'] : ['meta'],

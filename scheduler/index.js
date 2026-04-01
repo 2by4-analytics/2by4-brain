@@ -14,11 +14,14 @@ async function fetchDashboardData(clientId, date) {
   return res.json();
 }
 
-function getYesterday() {
+function getYesterdayForClient(timezone) {
   const now = new Date();
-  const ct = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
-  ct.setDate(ct.getDate() - 1);
-  return ct.toISOString().split('T')[0];
+  const local = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+  local.setDate(local.getDate() - 1);
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, '0');
+  const d = String(local.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 async function analyzeClient(clientId, clientConfig, data) {
@@ -63,8 +66,7 @@ List top performers. Same format.
 }
 
 export async function runMorningBriefing(targetClientIds = null) {
-  const date = getYesterday();
-  console.log(`[Scheduler] Running morning briefing for ${date}`);
+  console.log(`[Scheduler] Running morning briefing`);
 
   clearClientCache();
   const allClients = await fetchClients();
@@ -74,10 +76,13 @@ export async function runMorningBriefing(targetClientIds = null) {
     .map(([id, config]) => ({ id, config }));
 
   const clientBriefings = [];
+  // Use Chicago as the reference date for the briefing filename
+  const reportDate = getYesterdayForClient('America/Chicago');
 
   for (const { id, config } of activeClients) {
+    const date = getYesterdayForClient(config.timezone);
     try {
-      console.log(`[Scheduler] Fetching data for ${config.name}...`);
+      console.log(`[Scheduler] Fetching data for ${config.name} (date: ${date} in ${config.timezone})...`);
       const data = await fetchDashboardData(id, date);
       const analysis = await analyzeClient(id, config, data);
       clientBriefings.push({
@@ -102,7 +107,7 @@ export async function runMorningBriefing(targetClientIds = null) {
   }
 
   const briefing = await saveBriefing({
-    reportDate: date,
+    reportDate,
     clients: clientBriefings,
     totalClients: clientBriefings.length,
     errors: clientBriefings.filter(c => c.status === 'error').length
