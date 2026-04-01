@@ -25,11 +25,21 @@ function getYesterdayForClient(timezone) {
 }
 
 async function analyzeClient(clientId, clientConfig, data) {
+  const adAccounts = data.adAccounts || [];
+  const totalSales = adAccounts.reduce((s, a) => s + (a.cocTotals?.sales || 0), 0);
+  const totalSpend = adAccounts.reduce((s, a) => s + (a.fbSpend || 0), 0);
+  const blendedCPP = totalSales > 0 ? (totalSpend / totalSales).toFixed(2) : 'N/A';
+
   const prompt = `You are analyzing yesterday's Meta ad performance for ${clientConfig.name}.
 CPP Target: $${clientConfig.cppTarget}
 Daily Spend Budget: ~$${clientConfig.dailySpend || 'unknown'}
 
-Raw performance data:
+Top-line numbers (use these, do not re-sum from hierarchy):
+- Total Purchases: ${totalSales}
+- Total Spend: $${totalSpend.toFixed(2)}
+- Blended CPP: ${blendedCPP !== 'N/A' ? '$' + blendedCPP : 'N/A'}
+
+Full hierarchy data (use for campaign/adset/ad breakdown only):
 ${JSON.stringify(data, null, 2)}
 
 Produce a structured briefing with these exact sections. Use plain text only — no markdown tables, no pipe characters, no ### headers.
