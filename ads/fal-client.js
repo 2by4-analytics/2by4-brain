@@ -1,0 +1,109 @@
+// Thin wrapper around fal.ai's HTTP API.
+// Uses the queue endpoint so long generations don't hit HTTP timeouts.
+
+const FAL_QUEUE_BASE = 'https://queue.fal.run';
+
+// Logical model name → fal.ai model id.
+// Adjust these if fal renames or versions change.
+export const MODELS = {
+  'nano-banana-2': 'fal-ai/nano-banana',
+  'flux-dev':      'fal-ai/flux/dev',
+  'flux-pro':      'fal-ai/flux-pro/v1.1'
+};
+
+// Rough per-image cost in USD (display only, not authoritative).
+export const MODEL_COSTS = {
+  'nano-banana-2': 0.02,
+  'flux-dev':      0.025,
+  'flux-pro':      0.05
+};
+
+function authHeaders() {
+  if (!process.env.FAL_KEY) {
+    throw new Error('FAL_KEY is not set — cannot call fal.ai.');
+  }
+  return {
+    'Authorization': `Key ${process.env.FAL_KEY}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function submitJob(modelId, input) {
+  const res = await fetch(`${FAL_QUEUE_BASE}/${modelId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(input)
+  });
+  if (!res.ok) throw new Error(`fal submit ${res.status}: ${await res.text()}`);
+  return res.json(); // { request_id, status_url, response_url }
+}
+
+async function pollJob(statusUrl, responseUrl, { maxWaitMs = 120_000, pollMs = 2000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    const s = await fetch(statusUrl, { headers: authHeaders() });
+    if (!s.ok) throw new Error(`fal status ${s.status}: ${await s.text()}`);
+    const status = await s.json();
+    if (status.status === 'COMPLETED') {
+      const r = await fetch(responseUrl, { headers: authHeaders() });
+      if (!r.ok) throw new Error(`fal result ${r.status}: ${await r.text()}`);
+      return r.json();
+    }
+    if (status.status === 'FAILED') {
+      throw new Error(`fal job failed: ${JSON.stringify(status)}`);
+    }
+    await sleep(pollMs);
+  }
+  throw new Error(`fal job timed out after ${maxWaitMs}ms`);
+}
+
+// Generate a single image. Returns { imageUrl, seed, model, rawResponse }.
+export async function generateImage({ model = 'nano-banana-2', prompt, aspectRatio = '1:1', seed }) {
+  const modelId = MODELS[model];
+  if (!modelId) throw new Error(`Unknown model: ${model}. Available: ${Object.keys(MODELS).join(', ')}`);
+
+  // fal input varies slightly by model — most accept prompt + image_size/aspect.
+  const input = { prompt };
+  if (seed !== undefined) input.seed = seed;
+
+  // Map our aspect to fal conventions. Most models accept image_size string.
+  if (model.startsWith('flux')) {
+    input.image_size = aspectRatio === '1:1' ? 'square_hd'
+      : aspectRatio === '16:9' ? 'landscape_16_9'
+      : aspectRatio === '9:16' ? 'portrait_16_9'
+      : 'square_hd';
+    input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
+  } else {
+    input.aspect_ratio = aspectRatio;
+  }
+
+  const { status_url, response_url } = await submitJob(modelId, input);
+  const result = await pollJob(status_url, response_url);
+
+  const imageUrl = result.images?.[0]?.url || result.image?.url || result.url;
+  if (!imageUrl) throw new Error(`fal response had no image URL: ${JSON.stringify(result).slice(0, 500)}`);
+
+  return {
+    imageUrl,
+    seed: result.seed ?? seed ?? null,
+    model,
+    costEstimate: MODEL_COSTS[model] ?? null,
+    rawResponse: result
+  };
+}
+
+// Generate N variants in parallel with different seeds.
+export async function generateVariants({ model, prompt, aspectRatio, count = 3 }) {
+  const jobs = Array.from({ length: count }, (_, i) =>
+    generateImage({ model, prompt, aspectRatio, seed: Date.now() + i }).catch(err => ({ error: err.message, index: i }))
+  );
+  const results = await Promise.all(jobs);
+  return {
+    model,
+    prompt,
+    variants: results,
+    costEstimate: (MODEL_COSTS[model] ?? 0) * count
+  };
+}

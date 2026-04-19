@@ -3,6 +3,9 @@ import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
 import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
 import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
+import { generateImage, generateVariants, MODELS, MODEL_COSTS } from '../ads/fal-client.js';
+import { composeAd } from '../ads/compositor.js';
+import { getBrand, listBrandedClients } from '../ads/brands.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 const DASH_REPO = '2by4-analytics/claude-dash';
@@ -261,6 +264,66 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'refine_image_prompt',
+    description: 'Turn a rough idea into a polished image-generation prompt tailored to a client\'s brand. Use when Alan describes what he wants to see ("rider at sunset in the desert") and we need a prompt before calling generate_image. Returns a cleaned prompt that blends Alan\'s direction with the client\'s vibe, base prompt hints, and things-to-avoid. Cheap (no fal call).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'Client ID (see listBrandedClients for the set).' },
+        rough_idea: { type: 'string', description: 'Alan\'s description of the image — can be as loose as he wants.' }
+      },
+      required: ['clientId', 'rough_idea']
+    }
+  },
+  {
+    name: 'generate_image',
+    description: 'Generate image variants for an ad via fal.ai. Defaults to 3 variants with different seeds. Use AFTER Alan has approved a prompt. Returns an array of fal-hosted image URLs Alan can pick from before compositing text.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string' },
+        prompt: { type: 'string', description: 'The polished image prompt (usually from refine_image_prompt).' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Which fal model. Default nano-banana-2 (fast/cheap). Use flux-pro for finals.' },
+        aspect_ratio: { type: 'string', enum: ['1:1', '16:9', '9:16'], description: 'Image aspect. Default 1:1 for Meta ads.' },
+        count: { type: 'number', description: 'How many variants to generate (default 3).' }
+      },
+      required: ['clientId', 'prompt']
+    }
+  },
+  {
+    name: 'composite_ad',
+    description: 'Take a generated image URL and overlay headline + subtext text to produce a finished ad PNG. Use AFTER Alan picks a variant from generate_image. Returns a public URL to the composited ad hosted on Brain. Can specify position, palette overrides, and multiple text overlays.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string' },
+        sourceImageUrl: { type: 'string', description: 'fal.ai image URL from generate_image.' },
+        overlays: {
+          type: 'array',
+          description: 'Text overlays. Order = top-to-bottom stack.',
+          items: {
+            type: 'object',
+            properties: {
+              text: { type: 'string' },
+              role: { type: 'string', enum: ['headline', 'sub'], description: 'headline = large/bold, sub = smaller caption' },
+              color: { type: 'string', description: 'Optional hex override (e.g. "#ffffff").' },
+              fontKey: { type: 'string', enum: ['oswald', 'inter', 'playfair'], description: 'Optional font override.' }
+            },
+            required: ['text', 'role']
+          }
+        },
+        position: { type: 'string', enum: ['top', 'center', 'bottom'], description: 'Where the text stack sits. Defaults to brand config.' },
+        overlayColor: { type: 'string', description: 'Optional gradient-background color override (hex).' }
+      },
+      required: ['clientId', 'sourceImageUrl', 'overlays']
+    }
+  },
+  {
+    name: 'list_ad_brands',
+    description: 'List which clients have ad-brand profiles configured (palette, font, vibe) and which are still stubs ("TODO"). Use when Alan asks "which clients can I make ads for" or before generating if unsure the client is set up.',
+    input_schema: { type: 'object', properties: {}, required: [] }
+  },
+  {
     name: 'get_creative_analysis',
     description: 'Retrieve the most recent stored creative analysis for a client without re-running the pipeline. Use when Alan asks to see the latest creative analysis, review scores, or check what was flagged for a client.',
     input_schema: {
@@ -375,6 +438,59 @@ export async function executeTool(name, input, allClients) {
         body: bodyParts.join('\n\n'),
         labels
       });
+    }
+
+    case 'refine_image_prompt': {
+      const brand = getBrand(input.clientId);
+      const hints = brand.basePromptHints ? `, ${brand.basePromptHints}` : '';
+      const avoid = brand.avoid ? `\n\nAvoid: ${brand.avoid}` : '';
+      return {
+        clientId: input.clientId,
+        clientName: brand.name,
+        vibe: brand.vibe,
+        prompt: `${input.rough_idea}${hints}.\n\nStyle: ${brand.vibe}${avoid}`,
+        note: 'Review this prompt with Alan before calling generate_image. Tweak wording to match his direction.'
+      };
+    }
+
+    case 'generate_image': {
+      const count = input.count ?? 3;
+      const model = input.model || 'nano-banana-2';
+      const aspectRatio = input.aspect_ratio || '1:1';
+      const result = await generateVariants({ model, prompt: input.prompt, aspectRatio, count });
+      return {
+        clientId: input.clientId,
+        prompt: input.prompt,
+        model,
+        aspectRatio,
+        variants: result.variants.map((v, i) => v.error
+          ? { index: i, error: v.error }
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+        costEstimate: result.costEstimate,
+        note: 'Show URLs to Alan. After he picks one, call composite_ad with the sourceImageUrl.'
+      };
+    }
+
+    case 'composite_ad': {
+      const result = await composeAd({
+        clientId: input.clientId,
+        sourceImageUrl: input.sourceImageUrl,
+        overlays: input.overlays,
+        position: input.position,
+        overlayColor: input.overlayColor
+      });
+      return {
+        clientId: input.clientId,
+        ...result
+      };
+    }
+
+    case 'list_ad_brands': {
+      return {
+        availableModels: Object.keys(MODELS),
+        modelCosts: MODEL_COSTS,
+        clients: listBrandedClients()
+      };
     }
 
     case 'get_creative_analysis': {
