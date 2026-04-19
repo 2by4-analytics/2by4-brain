@@ -228,6 +228,78 @@
     padding: 20px;
   }
 
+  .main-tabs { display: flex; gap: 4px; }
+  .main-tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .main-tab:hover { color: var(--text); border-color: var(--text-dim); }
+  .main-tab.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .main-tab .count {
+    display: inline-block;
+    margin-left: 6px;
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+  .main-tab.active .count { color: var(--accent); }
+
+  .ad-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .ad-gallery-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    gap: 8px;
+  }
+  .ad-card {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .ad-card:hover { border-color: var(--accent); }
+  .ad-card a { display: block; line-height: 0; }
+  .ad-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .ad-card-meta {
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-mid);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border);
+  }
+  .ad-card-meta .label { color: var(--text); }
+  .ad-card-meta a { color: var(--accent); text-decoration: none; font-size: 10px; }
+  .ad-card-meta a:hover { opacity: 0.8; }
+
   .briefing-empty {
     display: flex;
     flex-direction: column;
@@ -576,10 +648,13 @@
   </div>
 </div>
 
-<!-- MAIN: Briefing -->
+<!-- MAIN: Briefing / Ads -->
 <div class="main">
   <div class="main-header">
-    <div class="main-title">Morning Briefing</div>
+    <div class="main-tabs">
+      <button class="main-tab active" id="tab-briefing" onclick="showMainTab('briefing')">Morning Briefing</button>
+      <button class="main-tab" id="tab-ads" onclick="showMainTab('ads')">Ads<span class="count" id="ads-count"></span></button>
+    </div>
     <div class="briefing-date" id="briefing-date">—</div>
   </div>
   <div class="briefing-scroll" id="briefing-scroll">
@@ -589,6 +664,12 @@
       <p style="font-size:10px;margin-top:4px;">Run briefing or wait for 7am auto-run</p>
     </div>
     <div id="briefing-content" style="display:none;"></div>
+    <div id="ad-gallery" class="ad-gallery" style="display:none;"></div>
+    <div id="ad-gallery-empty" class="ad-gallery-empty" style="display:none;">
+      <div style="font-size:24px;">◎</div>
+      <p>No ads yet</p>
+      <p style="font-size:10px;">Ask Brain to generate an ad — variants and finals will appear here.</p>
+    </div>
   </div>
 </div>
 
@@ -728,6 +809,87 @@ function renderBriefing(data) {
   }).join('');
 }
 
+// --- Ad gallery in the middle panel ---
+const adGalleryItems = []; // { url, label, kind }
+
+function extractImageUrls(text) {
+  const re = /(https?:\/\/[^\s<]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<]*)?)/gi;
+  const hits = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const url = m[1].replace(/[.,;:!?)\]]+$/, '');
+    hits.push(url);
+  }
+  return [...new Set(hits)];
+}
+
+function classifyImageUrl(url) {
+  if (url.includes('/ads/')) return 'final';
+  if (url.includes('fal.media') || url.includes('fal.run')) return 'variant';
+  return 'image';
+}
+
+function addAdsFromResponse(text) {
+  const urls = extractImageUrls(text);
+  if (!urls.length) return;
+  let newAnyFinal = false;
+  const stamp = Date.now();
+  urls.forEach((url, i) => {
+    if (adGalleryItems.some(it => it.url === url)) return;
+    const kind = classifyImageUrl(url);
+    if (kind === 'final') newAnyFinal = true;
+    adGalleryItems.unshift({
+      url,
+      kind,
+      label: kind === 'final' ? 'Final' : `Variant ${i + 1}`,
+      addedAt: stamp
+    });
+  });
+  renderAdGallery();
+  // Auto-switch to Ads tab whenever a final ad lands, or first time variants arrive.
+  if (newAnyFinal || adGalleryItems.length === urls.length) {
+    showMainTab('ads');
+  }
+}
+
+function renderAdGallery() {
+  const gallery = document.getElementById('ad-gallery');
+  const empty = document.getElementById('ad-gallery-empty');
+  const countEl = document.getElementById('ads-count');
+  countEl.textContent = adGalleryItems.length ? `(${adGalleryItems.length})` : '';
+  if (!adGalleryItems.length) {
+    gallery.style.display = 'none';
+    empty.style.display = 'flex';
+    return;
+  }
+  gallery.style.display = 'grid';
+  empty.style.display = 'none';
+  gallery.innerHTML = adGalleryItems.map(item => `
+    <div class="ad-card">
+      <a href="${item.url}" target="_blank" rel="noopener"><img src="${item.url}" alt="${item.label}"></a>
+      <div class="ad-card-meta">
+        <span class="label">${item.label}${item.kind === 'final' ? ' ✓' : ''}</span>
+        <a href="${item.url}" target="_blank" rel="noopener">open ↗</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+function showMainTab(tab) {
+  const isBriefing = tab === 'briefing';
+  document.getElementById('tab-briefing').classList.toggle('active', isBriefing);
+  document.getElementById('tab-ads').classList.toggle('active', !isBriefing);
+  document.getElementById('briefing-empty').style.display  = isBriefing
+    ? (document.getElementById('briefing-content').style.display === 'none' ? 'flex' : 'none')
+    : 'none';
+  document.getElementById('briefing-content').style.display = isBriefing
+    ? (document.getElementById('briefing-content').innerHTML ? 'block' : 'none')
+    : 'none';
+  const hasAds = adGalleryItems.length > 0;
+  document.getElementById('ad-gallery').style.display = (!isBriefing && hasAds) ? 'grid' : 'none';
+  document.getElementById('ad-gallery-empty').style.display = (!isBriefing && !hasAds) ? 'flex' : 'none';
+}
+
 function linkify(text) {
   // Markdown links first: [label](url) → <a>
   text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
@@ -851,6 +1013,7 @@ async function sendMessage() {
     const reply = data.response || data.error || 'No response';
     appendMessage('assistant', reply);
     chatHistory.push({ role: 'assistant', content: reply });
+    addAdsFromResponse(reply);
   } catch (e) {
     thinking.remove();
     appendMessage('assistant', `Error: ${e.message}`);
