@@ -1,7 +1,9 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { createServer } from 'http';
+import { randomBytes } from 'crypto';
 import cron from 'node-cron';
 import { runMorningBriefing } from './scheduler/index.js';
 import { initCreativeScheduler } from './scheduler/creative-scheduler.js';
@@ -12,9 +14,10 @@ import { fetchClients, clearClientCache } from './config/clients.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'dashboard')));
 app.use('/ads', express.static(path.resolve(process.env.ADS_STORAGE_DIR || './data/ads')));
+app.use('/uploads', express.static(path.resolve(process.env.UPLOADS_STORAGE_DIR || './data/uploads')));
 
 // Auth middleware (matches existing claude-dash pattern)
 const auth = (req, res, next) => next();
@@ -22,6 +25,27 @@ const auth = (req, res, next) => next();
 // Dashboard home
 app.get('/', auth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard', 'index.html'));
+});
+
+// Image upload — accepts { data: "data:image/png;base64,..." }, returns { url }
+app.post('/api/upload', auth, async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data || typeof data !== 'string') return res.status(400).json({ error: 'data field required' });
+    const match = data.match(/^data:(image\/(png|jpe?g|gif|webp));base64,(.+)$/);
+    if (!match) return res.status(400).json({ error: 'expected data URI with image/* mime type' });
+    const ext = match[2].replace('jpeg', 'jpg');
+    const buffer = Buffer.from(match[3], 'base64');
+    const dir = path.resolve(process.env.UPLOADS_STORAGE_DIR || './data/uploads');
+    await fs.mkdir(dir, { recursive: true });
+    const filename = `${Date.now()}-${randomBytes(4).toString('hex')}.${ext}`;
+    await fs.writeFile(path.join(dir, filename), buffer);
+    const base = (process.env.BRAIN_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`).replace(/\/$/, '');
+    res.json({ url: `${base}/uploads/${filename}`, bytes: buffer.length });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Chat endpoint — Brain dispatcher

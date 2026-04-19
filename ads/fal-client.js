@@ -11,6 +11,13 @@ export const MODELS = {
   'flux-pro':      'fal-ai/flux-pro/v1.1'
 };
 
+// Image-to-image / edit endpoints per model.
+export const EDIT_MODELS = {
+  'nano-banana-2': 'fal-ai/nano-banana/edit',
+  'flux-dev':      'fal-ai/flux/dev/image-to-image',
+  'flux-pro':      'fal-ai/flux-pro/v1.1/image-to-image'
+};
+
 // Rough per-image cost in USD (display only, not authoritative).
 export const MODEL_COSTS = {
   'nano-banana-2': 0.02,
@@ -91,6 +98,51 @@ export async function generateImage({ model = 'nano-banana-2', prompt, aspectRat
     model,
     costEstimate: MODEL_COSTS[model] ?? null,
     rawResponse: result
+  };
+}
+
+// Image-to-image variation. Takes a source image URL + an edit instruction.
+// Returns { imageUrl, model, rawResponse }.
+export async function generateVariation({ model = 'nano-banana-2', prompt, sourceImageUrl, seed }) {
+  const modelId = EDIT_MODELS[model];
+  if (!modelId) throw new Error(`No image-to-image endpoint for model: ${model}`);
+  if (!sourceImageUrl) throw new Error('sourceImageUrl is required');
+
+  const input = { prompt, image_url: sourceImageUrl };
+  if (model.startsWith('flux')) {
+    input.image_url = sourceImageUrl;
+    input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
+    input.strength = 0.75; // how much to deviate from source
+  }
+  if (seed !== undefined) input.seed = seed;
+
+  const { status_url, response_url } = await submitJob(modelId, input);
+  const result = await pollJob(status_url, response_url);
+
+  const imageUrl = result.images?.[0]?.url || result.image?.url || result.url;
+  if (!imageUrl) throw new Error(`fal variation response had no image URL: ${JSON.stringify(result).slice(0, 500)}`);
+
+  return {
+    imageUrl,
+    seed: result.seed ?? seed ?? null,
+    model,
+    costEstimate: MODEL_COSTS[model] ?? null,
+    rawResponse: result
+  };
+}
+
+// N parallel variations from the same source image.
+export async function generateVariationsFromSource({ model, prompt, sourceImageUrl, count = 3 }) {
+  const jobs = Array.from({ length: count }, (_, i) =>
+    generateVariation({ model, prompt, sourceImageUrl, seed: Date.now() + i }).catch(err => ({ error: err.message, index: i }))
+  );
+  const results = await Promise.all(jobs);
+  return {
+    model,
+    prompt,
+    sourceImageUrl,
+    variants: results,
+    costEstimate: (MODEL_COSTS[model] ?? 0) * count
   };
 }
 

@@ -3,7 +3,7 @@ import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
 import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
 import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
-import { generateImage, generateVariants, MODELS, MODEL_COSTS } from '../ads/fal-client.js';
+import { generateImage, generateVariants, generateVariationsFromSource, MODELS, MODEL_COSTS } from '../ads/fal-client.js';
 import { composeAd } from '../ads/compositor.js';
 import { getBrand, listBrandedClients } from '../ads/brands.js';
 
@@ -291,6 +291,45 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'generate_full_ad',
+    description: 'Generate a complete ad with typography BAKED INTO the image — the model renders headline/subtext as stylized text inside the scene (chipped paint, grunge, mixed fonts, etc.). Use this for dramatic display-type ads where text should feel integrated with the scene, not overlaid on it. Best with nano-banana-2. Returns 3 variants with different seeds. Do NOT use this for clean, readable CTAs/URLs/disclaimers — use composite_ad for those.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string' },
+        scene: { type: 'string', description: 'The visual scene description (subject, setting, lighting, mood).' },
+        copy: {
+          type: 'object',
+          description: 'The ad copy to bake into the image.',
+          properties: {
+            headline: { type: 'string', description: 'Main display text, e.g. "FREE OFF-GRID GEAR".' },
+            sub: { type: 'string', description: 'Secondary line, e.g. "TEST, REVIEW, & KEEP COOL GEAR!"' },
+            treatment: { type: 'string', description: 'Typography treatment, e.g. "huge chipped white paint serif, with one word italic olive green". Be specific — this directly controls how the model renders the text.' }
+          },
+          required: ['headline']
+        },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-pro'], description: 'Default nano-banana-2 (best at text-in-image). Use flux-pro for painterly finals.' },
+        count: { type: 'number', description: 'How many variants (default 3).' }
+      },
+      required: ['clientId', 'scene', 'copy']
+    }
+  },
+  {
+    name: 'generate_variation',
+    description: 'Create 3 variations of an existing image via fal image-to-image. Use when Alan pastes a winning ad and asks for variations ("same composition but daytime", "change colors to navy and gold", "more dramatic lighting"). Preserves composition while applying the instruction. Default model nano-banana-2.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string' },
+        sourceImageUrl: { type: 'string', description: 'URL of the image to vary. Usually a /uploads/ URL from Alan pasting, or a previous generation.' },
+        instruction: { type: 'string', description: 'What to change ("change time of day to golden hour", "swap background to a snowy mountain", "recolor to black and navy palette").' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Default nano-banana-2.' },
+        count: { type: 'number', description: 'How many variants (default 3).' }
+      },
+      required: ['clientId', 'sourceImageUrl', 'instruction']
+    }
+  },
+  {
     name: 'composite_ad',
     description: 'Take a generated image URL and overlay headline + subtext text to produce a finished ad PNG. Use AFTER Alan picks a variant from generate_image. Returns a public URL to the composited ad hosted on Brain. Can specify position, palette overrides, and multiple text overlays.',
     input_schema: {
@@ -468,6 +507,62 @@ export async function executeTool(name, input, allClients) {
           : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. After he picks one, call composite_ad with the sourceImageUrl.'
+      };
+    }
+
+    case 'generate_full_ad': {
+      const brand = getBrand(input.clientId);
+      const { headline, sub, treatment } = input.copy;
+      const model = input.model || 'nano-banana-2';
+      const count = input.count ?? 3;
+      const vibe = brand.vibe && brand.vibe !== 'TODO' && brand.vibe !== '—' ? brand.vibe : '';
+      const hints = brand.basePromptHints || '';
+      const prompt = [
+        input.scene,
+        '',
+        'Ad typography rendered INSIDE the image, clearly readable and integrated with the scene:',
+        `- Headline: "${headline}"`,
+        sub ? `- Subhead: "${sub}"` : null,
+        treatment ? `Typography treatment: ${treatment}.` : 'Typography treatment: bold display type, high contrast, editorial ad layout, text placed in a clean area of the composition.',
+        vibe ? `Style: ${vibe}.` : null,
+        hints ? `Style hints: ${hints}.` : null,
+        brand.avoid ? `Avoid: ${brand.avoid}.` : null,
+        '1:1 square composition.'
+      ].filter(Boolean).join('\n');
+
+      const result = await generateVariants({ model, prompt, aspectRatio: '1:1', count });
+      return {
+        clientId: input.clientId,
+        mode: 'baked-text',
+        prompt,
+        model,
+        variants: result.variants.map((v, i) => v.error
+          ? { index: i, error: v.error }
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+        costEstimate: result.costEstimate,
+        note: 'Text is baked into each variant. Show URLs to Alan — no composite_ad needed unless he wants additional overlay on top.'
+      };
+    }
+
+    case 'generate_variation': {
+      const model = input.model || 'nano-banana-2';
+      const count = input.count ?? 3;
+      const result = await generateVariationsFromSource({
+        model,
+        prompt: input.instruction,
+        sourceImageUrl: input.sourceImageUrl,
+        count
+      });
+      return {
+        clientId: input.clientId,
+        sourceImageUrl: input.sourceImageUrl,
+        instruction: input.instruction,
+        model,
+        variants: result.variants.map((v, i) => v.error
+          ? { index: i, error: v.error }
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+        costEstimate: result.costEstimate,
+        note: 'Show URLs to Alan. He can composite_ad on top, or feed a variant back into generate_variation for further iteration.'
       };
     }
 
