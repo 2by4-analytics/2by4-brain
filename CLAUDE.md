@@ -23,7 +23,7 @@ Brain calls Dash for data. Brain never hits Meta or CoC directly.
 ├── server.js                      # Express app entry point + scheduler init
 ├── brain/
 │   ├── dispatcher.js              # Claude API + agentic tool loop
-│   └── tools.js                   # Tool definitions: get_performance, get_all_performance, get_briefing, run_creative_generator, get_creative_analysis
+│   └── tools.js                   # Tool definitions: get_performance, get_all_performance, get_briefing, run_creative_generator, analyze_creatives, get_creative_analysis, run_performance_analysis, get_performance_analysis, list_dash_files, read_dash_file, create_fix_request
 ├── agents/
 │   ├── creative-gen.js            # Generates 3 hooks, 3 primary texts, image prompt
 │   ├── creative-analyst.js        # Scores ads SCALE/MONITOR/PAUSE; auto-triggers creative gen on PAUSE
@@ -53,6 +53,7 @@ Brain calls Dash for data. Brain never hits Meta or CoC directly.
 ANTHROPIC_API_KEY=
 DASHBOARD_URL=https://dash.2by4llc.com
 DASH_PASSWORD=
+GITHUB_TOKEN=             # fine-grained PAT, Issues:read-write on claude-dash + 2by4-brain
 PORT=3001
 ```
 
@@ -97,6 +98,21 @@ Applied by creative analyst. Exactly one flag per ad:
 - **PAUSE** — CPP over target OR CTR < 2% → stop spend
 
 When PAUSE ads are detected, creative analyst auto-triggers creative gen using winning patterns from SCALE ads as reference.
+
+---
+
+## Code Diagnosis & Fix Handoff
+
+Brain can read the `claude-dash` source from GitHub and file fix requests back to either repo.
+
+**Read tools** (public repo, no auth needed):
+- `list_dash_files(path?)` — list a directory in `2by4-analytics/claude-dash@main`
+- `read_dash_file(path)` — fetch a file via raw.githubusercontent.com (truncated at 80KB)
+
+**Handoff tool** (requires `GITHUB_TOKEN`):
+- `create_fix_request({ repo, title, problem, suggested_fix?, priority? })` — opens an issue in `claude-dash` (default) or `2by4-brain`, labeled `brain-filed` + `priority:<level>`, returns the issue URL.
+
+**Workflow:** Alan reports a bug or requests a change → Brain investigates with read tools → confirms with Alan → files issue → Alan opens Claude Code in the target repo and works the issue. Brain never edits code directly.
 
 ---
 
