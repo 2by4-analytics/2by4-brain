@@ -5,6 +5,16 @@ import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
 import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
+const DASH_REPO = '2by4-analytics/claude-dash';
+const DASH_BRANCH = 'main';
+const BRAIN_REPO = '2by4-analytics/2by4-brain';
+
+const REPO_ALIAS = {
+  dash: DASH_REPO,
+  'claude-dash': DASH_REPO,
+  brain: BRAIN_REPO,
+  '2by4-brain': BRAIN_REPO
+};
 
 async function dashFetch(path) {
   const res = await fetch(`${DASHBOARD_URL}${path}`, {
@@ -12,6 +22,49 @@ async function dashFetch(path) {
   });
   if (!res.ok) throw new Error(`Dashboard error: ${res.status}`);
   return res.json();
+}
+
+const GH_HEADERS = {
+  'Accept': 'application/vnd.github+json',
+  'User-Agent': '2by4-brain',
+  ...(process.env.GITHUB_TOKEN ? { 'Authorization': `Bearer ${process.env.GITHUB_TOKEN}` } : {})
+};
+
+async function githubListPath(path = '') {
+  const url = `https://api.github.com/repos/${DASH_REPO}/contents/${path}?ref=${DASH_BRANCH}`;
+  const res = await fetch(url, { headers: GH_HEADERS });
+  if (!res.ok) throw new Error(`GitHub list error ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error(`Path is a file, not a directory: ${path}`);
+  return data.map(e => ({ name: e.name, path: e.path, type: e.type, size: e.size }));
+}
+
+async function githubCreateIssue({ repo, title, body, labels }) {
+  if (!process.env.GITHUB_TOKEN) {
+    throw new Error('GITHUB_TOKEN is not set — cannot create issues. Add a token with issues:write scope to Railway env.');
+  }
+  const fullRepo = REPO_ALIAS[repo] || REPO_ALIAS.dash;
+  const res = await fetch(`https://api.github.com/repos/${fullRepo}/issues`, {
+    method: 'POST',
+    headers: { ...GH_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, body, labels })
+  });
+  if (!res.ok) throw new Error(`GitHub create-issue error ${res.status}: ${await res.text()}`);
+  const issue = await res.json();
+  return { repo: fullRepo, number: issue.number, url: issue.html_url, title: issue.title };
+}
+
+async function githubReadFile(path) {
+  if (!path) throw new Error('path is required');
+  const url = `https://raw.githubusercontent.com/${DASH_REPO}/${DASH_BRANCH}/${path}`;
+  const res = await fetch(url, { headers: GH_HEADERS });
+  if (!res.ok) throw new Error(`GitHub read error ${res.status} for ${path}`);
+  const content = await res.text();
+  const MAX = 80_000;
+  if (content.length > MAX) {
+    return { path, truncated: true, bytes: content.length, content: content.slice(0, MAX) };
+  }
+  return { path, truncated: false, bytes: content.length, content };
 }
 
 function getDateRange(period) {
@@ -148,6 +201,66 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'list_dash_files',
+    description: 'List files and directories in the claude-dash GitHub repo (2by4-analytics/claude-dash, main branch). Use to browse the dash codebase when Alan asks to diagnose dash code, find a file, or explore the repo structure. Returns an array of entries with name, path, type (file/dir), and size.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Repo-relative directory path (e.g. "src", "src/routes"). Omit or pass empty string for the repo root.'
+        }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'read_dash_file',
+    description: 'Read the contents of a single file from the claude-dash GitHub repo. Use to inspect dash source code for diagnosis, tracing bugs, or understanding how a dashboard endpoint works. Large files are truncated at 80KB.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Repo-relative file path (e.g. "src/routes/dashboard.js", "package.json").'
+        }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'create_fix_request',
+    description: 'Open a GitHub issue describing a bug or requested change, to hand off to Claude Code for implementation. Use when Alan confirms a code change is needed in dash or brain, or when diagnosis has surfaced a clear bug. Always include concrete detail: error symptom, affected file(s) if known, reproduction steps, and what the fix should look like. Do NOT use for questions or speculation — only for actionable fixes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        repo: {
+          type: 'string',
+          enum: ['dash', 'brain'],
+          description: 'Which repo the fix belongs in. "dash" = claude-dash (default), "brain" = 2by4-brain.'
+        },
+        title: {
+          type: 'string',
+          description: 'Concise one-line issue title (under 80 chars). Describe the problem, not the fix.'
+        },
+        problem: {
+          type: 'string',
+          description: 'What is wrong. Include: the observed behavior, relevant file paths or endpoints, error messages, how to reproduce. Be specific.'
+        },
+        suggested_fix: {
+          type: 'string',
+          description: 'Optional. What you believe the fix should be — approach, file changes, logic adjustment. Omit if unsure.'
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'normal', 'high'],
+          description: 'Optional. "high" = broken in prod or blocking Alan. Default "normal".'
+        }
+      },
+      required: ['title', 'problem']
+    }
+  },
+  {
     name: 'get_creative_analysis',
     description: 'Retrieve the most recent stored creative analysis for a client without re-running the pipeline. Use when Alan asks to see the latest creative analysis, review scores, or check what was flagged for a client.',
     input_schema: {
@@ -237,6 +350,31 @@ export async function executeTool(name, input, allClients) {
       const analysis = await getLatestPerformanceAnalysis(input.clientId);
       if (!analysis) return { message: `No stored performance analysis found for ${input.clientId}. Use run_performance_analysis to generate one.` };
       return analysis;
+    }
+
+    case 'list_dash_files': {
+      return await githubListPath(input.path || '');
+    }
+
+    case 'read_dash_file': {
+      return await githubReadFile(input.path);
+    }
+
+    case 'create_fix_request': {
+      const repo = input.repo || 'dash';
+      const priority = input.priority || 'normal';
+      const bodyParts = [
+        `## Problem\n${input.problem}`,
+        input.suggested_fix ? `## Suggested fix\n${input.suggested_fix}` : null,
+        `---\n_Filed by 2by4 Brain • priority: ${priority}_`
+      ].filter(Boolean);
+      const labels = ['brain-filed', `priority:${priority}`];
+      return await githubCreateIssue({
+        repo,
+        title: input.title,
+        body: bodyParts.join('\n\n'),
+        labels
+      });
     }
 
     case 'get_creative_analysis': {
