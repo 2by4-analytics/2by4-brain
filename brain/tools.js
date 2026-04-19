@@ -316,15 +316,15 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'generate_variation',
-    description: 'Create 3 variations of an existing image via fal image-to-image. Use when Alan pastes a winning ad and asks for variations ("same composition but daytime", "change colors to navy and gold", "more dramatic lighting"). Preserves composition while applying the instruction. Default model nano-banana-2.',
+    description: 'Create variation(s) of an existing image via fal image-to-image. Use when Alan pastes a winning ad, or picks a variant and asks for changes. Preserves composition while applying the instruction. DEFAULT COUNT IS 1 — if Alan already picked a specific version and wants a small fix ("make OFF-GRID fully green"), return just 1 refined version. Only use count=3 when Alan is exploring broadly or explicitly asks for multiple variations. Default model nano-banana-2.',
     input_schema: {
       type: 'object',
       properties: {
         clientId: { type: 'string' },
         sourceImageUrl: { type: 'string', description: 'URL of the image to vary. Usually a /uploads/ URL from Alan pasting, or a previous generation.' },
-        instruction: { type: 'string', description: 'What to change ("change time of day to golden hour", "swap background to a snowy mountain", "recolor to black and navy palette").' },
-        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Default nano-banana-2.' },
-        count: { type: 'number', description: 'How many variants (default 3).' }
+        instruction: { type: 'string', description: 'What to change. Be precise about colors, positions, and what should be preserved. Ex: "Recolor the word OFF-GRID to be entirely olive green (#6B8E23), keep everything else identical" — nano-banana is inconsistent with vague instructions.' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Default nano-banana-2. For a polished final where color/text precision matters, consider flux-pro.' },
+        count: { type: 'number', description: 'How many variants. DEFAULT 1. Use 3 only when exploring or Alan asks.' }
       },
       required: ['clientId', 'sourceImageUrl', 'instruction']
     }
@@ -546,7 +546,7 @@ export async function executeTool(name, input, allClients) {
 
     case 'generate_variation': {
       const model = input.model || 'nano-banana-2';
-      const count = input.count ?? 3;
+      const count = input.count ?? 1;
       const result = await generateVariationsFromSource({
         model,
         prompt: input.instruction,
