@@ -1,65 +1,76 @@
 # 2by4 Brain
 
-AI operations system for 2by4 LLC. Morning briefings + interactive client management.
+AI operations system for 2by4 LLC. Morning briefings, agentic chat for client management, performance + creative analysis, and ad image generation with a fal.ai + Sharp pipeline.
+
+For the full agency context (clients, metrics, infrastructure), see the top-level `CLAUDE.md`.
 
 ## Structure
 
 ```
 2by4-brain/
-├── server.js              # Express app + scheduler
+├── server.js              # Express app + scheduler + /api routes + /ads, /uploads static
 ├── brain/
-│   └── dispatcher.js      # Claude API + system prompt
-├── scheduler/
-│   └── index.js           # Morning briefing runner (7am CT)
-├── store/
-│   └── briefings.js       # JSON briefing storage
+│   ├── dispatcher.js      # Claude API + agentic tool loop + vision on uploaded images
+│   └── tools.js           # All tool definitions and executors
+├── agents/                # creative-gen, creative-analyst, performance-analyst, cpa-monitor
+├── ads/                   # fal-client, compositor, brands config, bundled OFL fonts
+├── scheduler/             # morning briefing (7am CT), creative-scheduler, performance-scheduler
+├── store/                 # briefings, creative-analyses, performance-analyses (JSON files)
 ├── config/
-│   └── clients.js         # All client config (single source of truth)
-├── agents/                # Sub-agents (to be built)
-│   ├── cpa-monitor.js
-│   ├── creative-gen.js
-│   ├── campaign-analyst.js
-│   ├── reporter.js
-│   └── onboarding.js
-├── data/
-│   └── briefings/         # Auto-created, daily JSON files
-└── dashboard/
-    └── index.html         # The UI
+│   └── clients.js         # dynamic client fetch from Dash API (with cache)
+├── dashboard/
+│   └── index.html         # 3-column UI (Briefing/Ads tabs + chat with paste/drop upload)
+└── data/                  # runtime storage (gitignored)
+    ├── ads/<clientId>/    # composited ads
+    └── uploads/           # user-uploaded images
 ```
 
 ## Environment Variables
 
 ```
-ANTHROPIC_API_KEY=
+ANTHROPIC_API_KEY=        # Claude API
 DASHBOARD_URL=https://dash.2by4llc.com
-ADMIN_USER=admin
-ADMIN_PASS=
+DASH_PASSWORD=            # shared secret for dash API
+GITHUB_TOKEN=             # fine-grained PAT, Issues:rw on claude-dash + 2by4-brain
+FAL_KEY=                  # fal.ai API key for image gen (format: <uuid>:<secret>)
+BRAIN_PUBLIC_URL=         # public base URL for /ads and /uploads links, e.g. https://brain.2by4llc.com
 PORT=3001
 ```
 
-## Deploy to Railway
+## Deploy
 
-1. Create new Railway project
-2. Connect this GitHub repo
-3. Set environment variables above
-4. Deploy — auto-deploys on push to main
+Railway auto-deploys on push to `main` (~60s). No build step — Node.js ESM.
+
+```bash
+git add -A && git commit -m "message" && git push
+```
 
 ## Usage
 
-- Open the dashboard in browser
-- Morning briefing auto-runs at 7am CT and appears on load
-- Use "RUN BRIEFING" button to trigger manually
-- Select a client in the left panel to load context
-- Chat with Brain in the right panel
+- **Dashboard**: open `brain.2by4llc.com`. Left column = client picker. Middle = Morning Briefing / Ads tabs. Right = Brain chat.
+- **Morning briefing**: auto-runs 7am CT daily. Use "RUN BRIEFING" to trigger manually.
+- **Chat**: select a client, ask Brain about performance, creative, or to generate ads. Paste or drag-drop an image into the chat input to attach (auto-uploads, Brain gets vision on it).
+- **Ads**: generated variants and composited finals appear as clickable thumbnails in the middle Ads tab.
 
-## Adding Agents
+## Tool catalog
 
-Each agent goes in `/agents/`. They receive client config + data and return structured output.
-The dispatcher in `brain/dispatcher.js` routes to them based on chat intent.
+See `CLAUDE.md` for the full tools catalog and when to use each. Quick reference:
 
-## Expanding to All Clients
+- **Data:** `get_performance`, `get_all_performance`, `get_briefing`, `run_performance_analysis`, `analyze_creatives`, `run_creative_generator`
+- **Ad generation:** `list_ad_brands`, `refine_image_prompt`, `generate_image`, `generate_full_ad` (baked text), `generate_variation` (img2img), `composite_ad` (SVG overlay)
+- **Code handoff:** `list_dash_files`, `read_dash_file`, `create_fix_request` (opens a GitHub issue for Claude Code to work)
 
-In `scheduler/index.js`, replace the `activeClients` array with:
+## Key patterns
+
+- **Client config:** always fetch dynamically via `fetchClients()`. Never hardcode IDs in agent logic.
+- **Timezone:** use per-client `getYesterdayForClient(timezone)` with manual `YYYY-MM-DD` formatting. Never `.toISOString()` on local-time Date objects.
+- **Meta API:** date preset is `last_7d` (not `last_7_days`), insights endpoint is `/insights`, `fbGet` has a 25s timeout.
+- **Baked vs overlay ads:** `generate_full_ad` for dramatic display type (model renders text inside image); `generate_image` + `composite_ad` for clean, crisp overlays (CTAs, URLs). Ask Alan which before generating.
+
+## Expanding morning briefing to all clients
+
+In `scheduler/index.js`, replace the `activeClients` filter:
+
 ```js
 const activeClients = Object.entries(CLIENTS)
   .filter(([, c]) => c.active)
