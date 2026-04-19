@@ -404,6 +404,18 @@
     border-left-color: var(--border);
   }
 
+  .message-content a { color: var(--accent); text-decoration: underline; word-break: break-all; }
+  .message-content a:hover { opacity: 0.8; }
+  .message-content .chat-image {
+    max-width: 100%;
+    max-height: 420px;
+    height: auto;
+    border-radius: 4px;
+    margin: 6px 0;
+    display: block;
+    border: 1px solid var(--border);
+  }
+  .message-content a:has(.chat-image) { text-decoration: none; display: block; }
   .message-content p { margin-bottom: 6px; }
   .message-content p:last-child { margin-bottom: 0; }
   .message-content strong { color: var(--accent); font-weight: 600; }
@@ -716,7 +728,25 @@ function renderBriefing(data) {
   }).join('');
 }
 
+function linkify(text) {
+  // Markdown links first: [label](url) → <a>
+  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // Bare URLs — only outside existing anchor tags
+  const chunks = text.split(/(<a\b[^>]*>[\s\S]*?<\/a>)/gi);
+  return chunks.map((c, i) => {
+    if (i % 2 === 1) return c;
+    return c.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, (url) => {
+      const isImg = /\.(png|jpg|jpeg|gif|webp)(\?|$)/i.test(url);
+      return isImg
+        ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="chat-image" alt=""></a>`
+        : `<a href="${url}" target="_blank" rel="noopener">${url}</a>`;
+    });
+  }).join('');
+}
+
 function renderMarkdown(text) {
+  text = linkify(text);
   // Tables
   text = text.replace(/\|(.+)\|\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/gm, (match, header, rows) => {
     const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
