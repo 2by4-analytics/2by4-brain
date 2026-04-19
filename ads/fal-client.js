@@ -108,11 +108,14 @@ export async function generateVariation({ model = 'nano-banana-2', prompt, sourc
   if (!modelId) throw new Error(`No image-to-image endpoint for model: ${model}`);
   if (!sourceImageUrl) throw new Error('sourceImageUrl is required');
 
-  const input = { prompt, image_url: sourceImageUrl };
+  const input = { prompt };
   if (model.startsWith('flux')) {
     input.image_url = sourceImageUrl;
     input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
     input.strength = 0.75; // how much to deviate from source
+  } else {
+    // nano-banana edit endpoint takes an array
+    input.image_urls = [sourceImageUrl];
   }
   if (seed !== undefined) input.seed = seed;
 
