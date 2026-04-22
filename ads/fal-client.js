@@ -28,6 +28,12 @@ export const MODEL_COSTS = {
   'gpt-image-2':   0.07
 };
 
+// Per-model poll timeout. gpt-image-2 at quality:high can exceed 2min on complex scenes.
+export const MODEL_TIMEOUTS_MS = {
+  'gpt-image-2': 240_000
+};
+const DEFAULT_TIMEOUT_MS = 120_000;
+
 function authHeaders() {
   if (!process.env.FAL_KEY) {
     throw new Error('FAL_KEY is not set — cannot call fal.ai.');
@@ -96,7 +102,7 @@ export async function generateImage({ model = 'nano-banana-2', prompt, aspectRat
   }
 
   const { status_url, response_url } = await submitJob(modelId, input);
-  const result = await pollJob(status_url, response_url);
+  const result = await pollJob(status_url, response_url, { maxWaitMs: MODEL_TIMEOUTS_MS[model] ?? DEFAULT_TIMEOUT_MS });
 
   const imageUrl = result.images?.[0]?.url || result.image?.url || result.url;
   if (!imageUrl) throw new Error(`fal response had no image URL: ${JSON.stringify(result).slice(0, 500)}`);
@@ -133,7 +139,7 @@ export async function generateVariation({ model = 'nano-banana-2', prompt, sourc
   if (seed !== undefined) input.seed = seed;
 
   const { status_url, response_url } = await submitJob(modelId, input);
-  const result = await pollJob(status_url, response_url);
+  const result = await pollJob(status_url, response_url, { maxWaitMs: MODEL_TIMEOUTS_MS[model] ?? DEFAULT_TIMEOUT_MS });
 
   const imageUrl = result.images?.[0]?.url || result.image?.url || result.url;
   if (!imageUrl) throw new Error(`fal variation response had no image URL: ${JSON.stringify(result).slice(0, 500)}`);
