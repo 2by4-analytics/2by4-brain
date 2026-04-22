@@ -104,9 +104,33 @@ When Alan identifies a bug or requests a code change in dash or brain:
 
 // Convert image URLs inside user messages into Claude vision content blocks.
 // Lets Brain actually SEE images Alan pastes/uploads.
-function expandImagesInMessages(messages) {
+// We fetch the bytes server-side and send as base64 so Anthropic never has
+// to reach out to our public URL — avoids the "Unable to download the file"
+// class of errors and works even when BRAIN_PUBLIC_URL is unset / local.
+const MEDIA_TYPE_BY_EXT = {
+  png:  'image/png',
+  jpg:  'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif:  'image/gif',
+  webp: 'image/webp'
+};
+
+async function fetchImageAsBase64(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`fetch ${res.status} ${url}`);
+  const ab = await res.arrayBuffer();
+  const buf = Buffer.from(ab);
+  if (buf.length > 5 * 1024 * 1024) {
+    throw new Error(`image too large for Claude vision: ${buf.length} bytes (>5MB) ${url}`);
+  }
+  const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();
+  const mediaType = MEDIA_TYPE_BY_EXT[ext] || res.headers.get('content-type') || 'image/png';
+  return { mediaType, data: buf.toString('base64') };
+}
+
+async function expandImagesInMessages(messages) {
   const imageRe = /(https?:\/\/[^\s<]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<]*)?)/gi;
-  return messages.map((m) => {
+  return Promise.all(messages.map(async (m) => {
     if (m.role !== 'user' || typeof m.content !== 'string') return m;
     const hits = [...m.content.matchAll(imageRe)];
     if (!hits.length) return m;
@@ -118,7 +142,13 @@ function expandImagesInMessages(messages) {
         const txt = m.content.slice(cursor, hit.index);
         if (txt.trim()) blocks.push({ type: 'text', text: txt });
       }
-      blocks.push({ type: 'image', source: { type: 'url', url } });
+      try {
+        const { mediaType, data } = await fetchImageAsBase64(url);
+        blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data } });
+      } catch (err) {
+        console.warn('[brain] image fetch failed, leaving as text:', err.message);
+        blocks.push({ type: 'text', text: url });
+      }
       cursor = hit.index + hit[0].length;
     }
     if (cursor < m.content.length) {
@@ -126,7 +156,7 @@ function expandImagesInMessages(messages) {
       if (tail.trim()) blocks.push({ type: 'text', text: tail });
     }
     return { role: 'user', content: blocks.length ? blocks : m.content };
-  });
+  }));
 }
 
 export async function chatWithBrain(messages, clientContext = null) {
@@ -144,7 +174,7 @@ export async function chatWithBrain(messages, clientContext = null) {
   }
 
   // Agentic loop — Brain can call tools multiple times before responding
-  const agentMessages = expandImagesInMessages(messages);
+  const agentMessages = await expandImagesInMessages(messages);
   
   while (true) {
     const response = await client.messages.create({
