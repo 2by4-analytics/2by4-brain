@@ -8,21 +8,24 @@ const FAL_QUEUE_BASE = 'https://queue.fal.run';
 export const MODELS = {
   'nano-banana-2': 'fal-ai/nano-banana',
   'flux-dev':      'fal-ai/flux/dev',
-  'flux-pro':      'fal-ai/flux-pro/v1.1'
+  'flux-pro':      'fal-ai/flux-pro/v1.1',
+  'gpt-image-2':   'fal-ai/gpt-image-2'
 };
 
 // Image-to-image / edit endpoints per model.
 export const EDIT_MODELS = {
   'nano-banana-2': 'fal-ai/nano-banana/edit',
   'flux-dev':      'fal-ai/flux/dev/image-to-image',
-  'flux-pro':      'fal-ai/flux-pro/v1.1/image-to-image'
+  'flux-pro':      'fal-ai/flux-pro/v1.1/image-to-image',
+  'gpt-image-2':   'fal-ai/gpt-image-2/edit'
 };
 
 // Rough per-image cost in USD (display only, not authoritative).
 export const MODEL_COSTS = {
   'nano-banana-2': 0.02,
   'flux-dev':      0.025,
-  'flux-pro':      0.05
+  'flux-pro':      0.05,
+  'gpt-image-2':   0.07
 };
 
 function authHeaders() {
@@ -76,12 +79,18 @@ export async function generateImage({ model = 'nano-banana-2', prompt, aspectRat
   if (seed !== undefined) input.seed = seed;
 
   // Map our aspect to fal conventions. Most models accept image_size string.
-  if (model.startsWith('flux')) {
+  if (model.startsWith('flux') || model === 'gpt-image-2') {
     input.image_size = aspectRatio === '1:1' ? 'square_hd'
       : aspectRatio === '16:9' ? 'landscape_16_9'
       : aspectRatio === '9:16' ? 'portrait_16_9'
       : 'square_hd';
-    input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
+    if (model.startsWith('flux')) {
+      input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
+    }
+    if (model === 'gpt-image-2') {
+      input.quality = 'high';
+      input.num_images = 1;
+    }
   } else {
     input.aspect_ratio = aspectRatio;
   }
@@ -113,6 +122,10 @@ export async function generateVariation({ model = 'nano-banana-2', prompt, sourc
     input.image_url = sourceImageUrl;
     input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
     input.strength = 0.75; // how much to deviate from source
+  } else if (model === 'gpt-image-2') {
+    input.image_urls = [sourceImageUrl];
+    input.quality = 'high';
+    input.num_images = 1;
   } else {
     // nano-banana edit endpoint takes an array
     input.image_urls = [sourceImageUrl];

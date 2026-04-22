@@ -130,7 +130,7 @@ Brain exposes these tools to Claude via the agentic loop in `brain/dispatcher.js
 - `run_creative_generator(clientId, brief)` — generate 3 hooks / 3 primary texts / 1 image prompt (text only — no image gen)
 
 ### Ad image generation
-- `list_ad_brands()` — show which clients have brand profiles configured + available models (nano-banana-2, flux-dev, flux-pro)
+- `list_ad_brands()` — show which clients have brand profiles configured + available models (nano-banana-2, flux-dev, flux-pro, gpt-image-2)
 - `refine_image_prompt(clientId, rough_idea)` — blend Alan's rough idea with the client's brand vibe into a polished image prompt
 - `generate_image(clientId, prompt, model?, aspect_ratio?, count?)` — 3 image variants via fal.ai (image only, no text) — use when text will be overlaid cleanly
 - `generate_full_ad(clientId, scene, copy, model?, count?)` — 3 variants where headline/subtext are BAKED into the image by the model — use for dramatic display typography (chipped paint, grunge, mixed fonts)

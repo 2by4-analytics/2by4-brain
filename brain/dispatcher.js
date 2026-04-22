@@ -70,7 +70,7 @@ When Alan wants to make an ad from scratch:
 2. Ask what image he wants. Don't guess — draw it out of him.
 3. Ask which treatment: baked-in dramatic text, or clean overlay (see "Choosing the right tool" above).
 4. Call refine_image_prompt with his rough idea. Show him the polished prompt. Iterate until he approves.
-5. Ask which model (nano-banana-2 for volume/fast, flux-pro for a polished final). Default to nano-banana-2.
+5. Ask which model (nano-banana-2 for volume/fast, flux-pro for painterly finals, gpt-image-2 for photorealism + strong prompt adherence at premium cost). Default to nano-banana-2.
 6. For baked: call generate_full_ad. For overlay: call generate_image, wait for Alan to pick a variant, then composite_ad.
 7. Show variant URLs to Alan for selection. Never skip this — he needs to pick.
 Never run an image-gen tool without explicit approval on the prompt — image gen costs real money.

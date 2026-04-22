@@ -283,8 +283,8 @@ export const TOOL_DEFINITIONS = [
       properties: {
         clientId: { type: 'string' },
         prompt: { type: 'string', description: 'The polished image prompt (usually from refine_image_prompt).' },
-        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Which fal model. Default nano-banana-2 (fast/cheap). Use flux-pro for finals.' },
-        aspect_ratio: { type: 'string', enum: ['1:1', '16:9', '9:16'], description: 'Image aspect. Default 1:1 for Meta ads.' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro', 'gpt-image-2'], description: 'Which fal model. Default nano-banana-2 (fast/cheap). flux-pro for painterly finals. gpt-image-2 for OpenAI-style photorealism + strong prompt adherence (premium cost).' },
+        aspect_ratio: { type: 'string', enum: ['1:1', '9:16'], description: 'Image aspect. 1:1 = 1024×1024 square (Meta feed default). 9:16 = vertical (Stories/Reels). Default 1:1.' },
         count: { type: 'number', description: 'How many variants to generate (default 3).' }
       },
       required: ['clientId', 'prompt']
@@ -308,7 +308,7 @@ export const TOOL_DEFINITIONS = [
           },
           required: ['headline']
         },
-        model: { type: 'string', enum: ['nano-banana-2', 'flux-pro'], description: 'Default nano-banana-2 (best at text-in-image). Use flux-pro for painterly finals.' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-pro', 'gpt-image-2'], description: 'Default nano-banana-2 (best at text-in-image). flux-pro for painterly finals. gpt-image-2 also strong at in-image text with high prompt adherence.' },
         count: { type: 'number', description: 'How many variants (default 3).' }
       },
       required: ['clientId', 'scene', 'copy']
@@ -323,7 +323,7 @@ export const TOOL_DEFINITIONS = [
         clientId: { type: 'string' },
         sourceImageUrl: { type: 'string', description: 'URL of the image to vary. Usually a /uploads/ URL from Alan pasting, or a previous generation.' },
         instruction: { type: 'string', description: 'What to change. Be precise about colors, positions, and what should be preserved. Ex: "Recolor the word OFF-GRID to be entirely olive green (#6B8E23), keep everything else identical" — nano-banana is inconsistent with vague instructions.' },
-        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro'], description: 'Default nano-banana-2. For a polished final where color/text precision matters, consider flux-pro.' },
+        model: { type: 'string', enum: ['nano-banana-2', 'flux-dev', 'flux-pro', 'gpt-image-2'], description: 'Default nano-banana-2. For a polished final where color/text precision matters, consider flux-pro or gpt-image-2.' },
         count: { type: 'number', description: 'How many variants. DEFAULT 1. Use 3 only when exploring or Alan asks.' }
       },
       required: ['clientId', 'sourceImageUrl', 'instruction']
