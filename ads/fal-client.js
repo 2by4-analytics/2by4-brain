@@ -169,7 +169,12 @@ export async function generateVariationsFromSource({ model, prompt, sourceImageU
 }
 
 // Generate N variants in parallel with different seeds.
+// gpt-image-2 doesn't honor seed (OpenAI backing model is deterministic on prompt),
+// so we use fal's native num_images batch in a single queue job instead.
 export async function generateVariants({ model, prompt, aspectRatio, count = 3 }) {
+  if (model === 'gpt-image-2') {
+    return generateBatchGptImage2({ prompt, aspectRatio, count });
+  }
   const jobs = Array.from({ length: count }, (_, i) =>
     generateImage({ model, prompt, aspectRatio, seed: Date.now() + i }).catch(err => ({ error: err.message, index: i }))
   );
@@ -180,4 +185,44 @@ export async function generateVariants({ model, prompt, aspectRatio, count = 3 }
     variants: results,
     costEstimate: (MODEL_COSTS[model] ?? 0) * count
   };
+}
+
+async function generateBatchGptImage2({ prompt, aspectRatio, count }) {
+  const modelId = MODELS['gpt-image-2'];
+  const input = {
+    prompt,
+    image_size: aspectRatio === '9:16' ? 'portrait_16_9'
+             : aspectRatio === '16:9' ? 'landscape_16_9'
+             : 'square_hd',
+    quality: 'high',
+    num_images: count
+  };
+  try {
+    const { status_url, response_url } = await submitJob(modelId, input);
+    const result = await pollJob(status_url, response_url, { maxWaitMs: MODEL_TIMEOUTS_MS['gpt-image-2'] ?? DEFAULT_TIMEOUT_MS });
+    const images = result.images || [];
+    const variants = images.map((img) => ({
+      imageUrl: img.url,
+      seed: null,
+      model: 'gpt-image-2',
+      costEstimate: MODEL_COSTS['gpt-image-2'] ?? null,
+      rawResponse: img
+    }));
+    while (variants.length < count) {
+      variants.push({ error: 'fal returned fewer images than requested', index: variants.length });
+    }
+    return {
+      model: 'gpt-image-2',
+      prompt,
+      variants,
+      costEstimate: (MODEL_COSTS['gpt-image-2'] ?? 0) * count
+    };
+  } catch (err) {
+    return {
+      model: 'gpt-image-2',
+      prompt,
+      variants: Array.from({ length: count }, (_, i) => ({ error: err.message, index: i })),
+      costEstimate: 0
+    };
+  }
 }

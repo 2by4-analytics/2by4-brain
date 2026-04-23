@@ -4,6 +4,7 @@ import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
 import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
 import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
 import { generateImage, generateVariants, generateVariationsFromSource, MODELS, MODEL_COSTS } from '../ads/fal-client.js';
+import { persistFalVariants } from '../ads/persist.js';
 import { composeAd } from '../ads/compositor.js';
 import { getBrand, listBrandedClients } from '../ads/brands.js';
 
@@ -497,14 +498,15 @@ export async function executeTool(name, input, allClients) {
       const model = input.model || 'nano-banana-2';
       const aspectRatio = input.aspect_ratio || '1:1';
       const result = await generateVariants({ model, prompt: input.prompt, aspectRatio, count });
+      const variants = await persistFalVariants(input.clientId, result.variants);
       return {
         clientId: input.clientId,
         prompt: input.prompt,
         model,
         aspectRatio,
-        variants: result.variants.map((v, i) => v.error
+        variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. After he picks one, call composite_ad with the sourceImageUrl.'
       };
@@ -531,14 +533,15 @@ export async function executeTool(name, input, allClients) {
       ].filter(Boolean).join('\n');
 
       const result = await generateVariants({ model, prompt, aspectRatio: '1:1', count });
+      const variants = await persistFalVariants(input.clientId, result.variants);
       return {
         clientId: input.clientId,
         mode: 'baked-text',
         prompt,
         model,
-        variants: result.variants.map((v, i) => v.error
+        variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
         costEstimate: result.costEstimate,
         note: 'Text is baked into each variant. Show URLs to Alan — no composite_ad needed unless he wants additional overlay on top.'
       };
@@ -553,14 +556,15 @@ export async function executeTool(name, input, allClients) {
         sourceImageUrl: input.sourceImageUrl,
         count
       });
+      const variants = await persistFalVariants(input.clientId, result.variants);
       return {
         clientId: input.clientId,
         sourceImageUrl: input.sourceImageUrl,
         instruction: input.instruction,
         model,
-        variants: result.variants.map((v, i) => v.error
+        variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed }),
+          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. He can composite_ad on top, or feed a variant back into generate_variation for further iteration.'
       };
