@@ -145,6 +145,9 @@ async function expandImagesInMessages(messages) {
       try {
         const { mediaType, data } = await fetchImageAsBase64(url);
         blocks.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data } });
+        // Keep the URL visible to the model so downstream tools (composite_ad, generate_variation)
+        // can reference it by sourceImageUrl even though vision is via base64.
+        blocks.push({ type: 'text', text: url });
       } catch (err) {
         console.warn('[brain] image fetch failed, leaving as text:', err.message);
         blocks.push({ type: 'text', text: url });
