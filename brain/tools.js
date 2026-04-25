@@ -311,6 +311,7 @@ export const TOOL_DEFINITIONS = [
           required: ['headline']
         },
         model: { type: 'string', enum: ['nano-banana-2', 'flux-pro', 'gpt-image-2'], description: 'Default nano-banana-2 (best at text-in-image). flux-pro for painterly finals. gpt-image-2 also strong at in-image text with high prompt adherence.' },
+        aspect_ratio: { type: 'string', enum: ['1:1', '9:16', '16:9'], description: '1:1 = feed (default). 9:16 = Reels/Stories. 16:9 = landscape.' },
         count: { type: 'number', description: 'How many variants (default 3).' }
       },
       required: ['clientId', 'scene', 'copy']
@@ -549,6 +550,12 @@ export async function executeTool(name, input, allClients) {
       const { headline, sub, treatment } = input.copy;
       const model = input.model || 'nano-banana-2';
       const count = input.count ?? 3;
+      const aspectRatio = input.aspect_ratio || '1:1';
+      const compositionLine = aspectRatio === '9:16'
+        ? 'Vertical 9:16 composition (Reels/Stories format) — taller than wide, subject centered with breathing room top and bottom.'
+        : aspectRatio === '16:9'
+          ? 'Horizontal 16:9 composition (landscape) — wider than tall.'
+          : '1:1 square composition.';
       const vibe = brand.vibe && brand.vibe !== 'TODO' && brand.vibe !== '—' ? brand.vibe : '';
       const hints = brand.basePromptHints || '';
       const prompt = [
@@ -561,16 +568,17 @@ export async function executeTool(name, input, allClients) {
         vibe ? `Style: ${vibe}.` : null,
         hints ? `Style hints: ${hints}.` : null,
         brand.avoid ? `Avoid: ${brand.avoid}.` : null,
-        '1:1 square composition.'
+        compositionLine
       ].filter(Boolean).join('\n');
 
-      const result = await generateVariants({ model, prompt, aspectRatio: '1:1', count });
+      const result = await generateVariants({ model, prompt, aspectRatio, count });
       const variants = await persistFalVariants(input.clientId, result.variants);
       return {
         clientId: input.clientId,
         mode: 'baked-text',
         prompt,
         model,
+        aspectRatio,
         variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
           : {
