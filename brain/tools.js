@@ -514,8 +514,14 @@ export async function executeTool(name, input, allClients) {
       const count = input.count ?? 3;
       const model = input.model || 'nano-banana-2';
       const aspectRatio = input.aspect_ratio || '1:1';
+      const t0 = Date.now();
       const result = await generateVariants({ model, prompt: input.prompt, aspectRatio, count });
+      const tFal = Date.now() - t0;
       const variants = await persistFalVariants(input.clientId, result.variants);
+      const tTotal = Date.now() - t0;
+      const successCount = variants.filter(v => !v.error).length;
+      const errorCount = variants.filter(v => v.error).length;
+      console.log(`[generate_image] client=${input.clientId} model=${model} aspect=${aspectRatio} count=${count} fal=${tFal}ms total=${tTotal}ms success=${successCount} errors=${errorCount}`);
       return {
         clientId: input.clientId,
         prompt: input.prompt,
@@ -531,7 +537,10 @@ export async function executeTool(name, input, allClients) {
               ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
             }),
         costEstimate: result.costEstimate,
-        note: 'Show URLs to Alan. After he picks one, call composite_ad with the sourceImageUrl.'
+        _diagnostic: { falMs: tFal, totalMs: tTotal, success: successCount, errors: errorCount },
+        note: errorCount > 0
+          ? `${errorCount} variant(s) failed. Tell Alan exactly which failed and the error. NEVER fabricate URLs for failed variants.`
+          : 'Show the actual URLs from this response to Alan. After he picks one, call composite_ad with the sourceImageUrl. NEVER make up URLs — only use the strings present in this tool result.'
       };
     }
 
