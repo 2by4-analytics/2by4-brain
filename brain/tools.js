@@ -523,7 +523,13 @@ export async function executeTool(name, input, allClients) {
         aspectRatio,
         variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
+          : {
+              index: i,
+              imageUrl: v.imageUrl,
+              falSourceUrl: v.falSourceUrl,
+              seed: v.seed,
+              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+            }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. After he picks one, call composite_ad with the sourceImageUrl.'
       };
@@ -558,7 +564,13 @@ export async function executeTool(name, input, allClients) {
         model,
         variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
+          : {
+              index: i,
+              imageUrl: v.imageUrl,
+              falSourceUrl: v.falSourceUrl,
+              seed: v.seed,
+              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+            }),
         costEstimate: result.costEstimate,
         note: 'Text is baked into each variant. Show URLs to Alan — no composite_ad needed unless he wants additional overlay on top.'
       };
@@ -581,7 +593,13 @@ export async function executeTool(name, input, allClients) {
         model,
         variants: variants.map((v, i) => v.error
           ? { index: i, error: v.error }
-          : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
+          : {
+              index: i,
+              imageUrl: v.imageUrl,
+              falSourceUrl: v.falSourceUrl,
+              seed: v.seed,
+              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+            }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. He can composite_ad on top, or feed a variant back into generate_variation for further iteration.'
       };
