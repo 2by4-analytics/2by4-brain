@@ -197,10 +197,11 @@ export async function generateVideoFromImage({
   if (!sourceImageUrl) throw new Error('sourceImageUrl is required');
   if (!prompt) throw new Error('prompt is required (motion / what should happen in the video)');
 
+  // Duration shape varies by model: kling wants "5", veo wants "6s".
   const input = {
     prompt,
     image_url: sourceImageUrl,
-    duration: String(durationSec),
+    duration: model.startsWith('veo') ? `${durationSec}s` : String(durationSec),
     aspect_ratio: aspectRatio
   };
 
