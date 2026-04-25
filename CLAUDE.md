@@ -52,9 +52,10 @@ Brain calls Dash for data. Brain never hits Meta or CoC directly.
 │   └── clients.js                 # Dynamic client fetch from Dash API (with cache)
 ├── dashboard/
 │   └── index.html                 # 3-column UI: client sidebar, Briefing/Ads tabs, Brain chat (paste/drop for image upload)
-└── data/                          # Runtime storage (gitignored)
-    ├── ads/<clientId>/*.png       # Composited ads, served at /ads/*
-    └── uploads/*.png              # User-uploaded images, served at /uploads/*
+└── data/                          # Runtime storage (gitignored, MUST be on a persistent volume — see "Storage" below)
+    ├── ads/<clientId>/             # Composited ads + persisted variants, served at /ads/*
+    ├── uploads/                    # User-uploaded images, served at /uploads/*
+    └── videos/<clientId>/          # Generated videos (mp4), served at /videos/*
 ```
 
 ---
@@ -66,8 +67,11 @@ ANTHROPIC_API_KEY=        # Claude API key
 DASHBOARD_URL=https://dash.2by4llc.com
 DASH_PASSWORD=            # shared secret for dash API calls
 GITHUB_TOKEN=             # fine-grained PAT — Issues:read-write on claude-dash + 2by4-brain
-FAL_KEY=                  # fal.ai API key for image generation (format: <uuid>:<secret>)
-BRAIN_PUBLIC_URL=         # e.g. https://brain.2by4llc.com — used when building public /ads and /uploads URLs
+FAL_KEY=                  # fal.ai API key for image + video generation (format: <uuid>:<secret>)
+BRAIN_PUBLIC_URL=         # e.g. https://brain.2by4llc.com — base for /ads, /uploads, /videos URLs
+ADS_STORAGE_DIR=          # path to persistent volume for composited ads + variants — e.g. /data/ads
+UPLOADS_STORAGE_DIR=      # path to persistent volume for user uploads — e.g. /data/uploads
+VIDEOS_STORAGE_DIR=       # path to persistent volume for generated videos — e.g. /data/videos
 PORT=3001
 ```
 
@@ -158,10 +162,25 @@ Two fundamentally different paths, and Brain should ask which one before generat
 
 **Storage:**
 - Uploads → `data/uploads/<hash>.<ext>` → served at `/uploads/*`
-- Composited ads → `data/ads/<clientId>/<timestamp>.png` → served at `/ads/*`
-- Fal-generated variants → hosted on fal.media CDN (30-day retention, no local copy)
+- Composited ads + persisted fal variants → `data/ads/<clientId>/...` → served at `/ads/*`
+- Generated videos → `data/videos/<clientId>/<timestamp>.mp4` → served at `/videos/*`
+- Fal-generated variants are also persisted to Brain's disk via `ads/persist.js` so the URLs survive past fal's ~30-day CDN window
 
-All paths configurable via `ADS_STORAGE_DIR` / `UPLOADS_STORAGE_DIR` env vars.
+All paths configurable via `ADS_STORAGE_DIR`, `UPLOADS_STORAGE_DIR`, `VIDEOS_STORAGE_DIR`.
+
+### Railway Volume — REQUIRED for persistence
+
+**Without a persistent volume mounted, every Railway redeploy wipes `data/`** — meaning every `git push` to main destroys all previously generated ads, variants, uploads, and videos. URLs returned by Brain before that deploy then 404.
+
+`persistFalVariants` HEAD-verifies the brain URL after writing and falls back to the fal CDN URL if the disk path doesn't serve, so callers never get a dead URL — but the fal CDN expires after ~30 days.
+
+**Production setup on Railway:**
+1. Service Settings → Volumes → New Volume
+2. Mount path: `/data`
+3. Set env vars: `ADS_STORAGE_DIR=/data/ads`, `UPLOADS_STORAGE_DIR=/data/uploads`, `VIDEOS_STORAGE_DIR=/data/videos`
+4. Redeploy
+
+After this, files survive deploys indefinitely and brain URLs stay valid.
 
 ---
 

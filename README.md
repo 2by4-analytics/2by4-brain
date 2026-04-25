@@ -32,10 +32,24 @@ ANTHROPIC_API_KEY=        # Claude API
 DASHBOARD_URL=https://dash.2by4llc.com
 DASH_PASSWORD=            # shared secret for dash API
 GITHUB_TOKEN=             # fine-grained PAT, Issues:rw on claude-dash + 2by4-brain
-FAL_KEY=                  # fal.ai API key for image gen (format: <uuid>:<secret>)
-BRAIN_PUBLIC_URL=         # public base URL for /ads and /uploads links, e.g. https://brain.2by4llc.com
+FAL_KEY=                  # fal.ai API key for image + video gen (format: <uuid>:<secret>)
+BRAIN_PUBLIC_URL=         # public base URL for /ads, /uploads, /videos links, e.g. https://brain.2by4llc.com
+ADS_STORAGE_DIR=          # path on Railway volume for ads — e.g. /data/ads (see Storage below)
+UPLOADS_STORAGE_DIR=      # path on Railway volume for uploads — e.g. /data/uploads
+VIDEOS_STORAGE_DIR=       # path on Railway volume for videos — e.g. /data/videos
 PORT=3001
 ```
+
+## Storage — Railway volume required
+
+Brain writes to `data/ads/`, `data/uploads/`, `data/videos/`. **On Railway, the local filesystem is wiped on every redeploy** — without a mounted volume, every `git push` destroys previously generated assets and any URLs returned to users 404.
+
+Setup once on Railway:
+1. Service → Settings → Volumes → New Volume, mount at `/data`
+2. Set the three `*_STORAGE_DIR` env vars above to point at that mount
+3. Redeploy — assets now persist across deploys
+
+`persistFalVariants` falls back to the fal CDN URL (~30-day expiry) if the brain disk doesn't serve, so URLs are never dead in the moment, but a real volume is required for long-term retention. Full details in `CLAUDE.md` "Railway Volume" section.
 
 ## Deploy
 
