@@ -34,6 +34,21 @@ export const MODEL_TIMEOUTS_MS = {
 };
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+// Image-to-video endpoints per model.
+// Verify model paths in fal's catalog if anything 404s — fal renames endpoints occasionally.
+export const VIDEO_I2V_MODELS = {
+  'kling-2.1':     'fal-ai/kling-video/v2.1/standard/image-to-video',
+  'veo3-fast':     'fal-ai/veo3/fast/image-to-video',
+  'veo3':          'fal-ai/veo3/image-to-video'
+};
+
+// Per-clip cost in USD for a 5-second video (rough — actual depends on duration & model tier).
+export const VIDEO_MODEL_COSTS = {
+  'kling-2.1': 0.25,
+  'veo3-fast': 0.75,
+  'veo3':      2.50
+};
+
 function authHeaders() {
   if (!process.env.FAL_KEY) {
     throw new Error('FAL_KEY is not set — cannot call fal.ai.');
@@ -165,6 +180,44 @@ export async function generateVariationsFromSource({ model, prompt, sourceImageU
     sourceImageUrl,
     variants: results,
     costEstimate: (MODEL_COSTS[model] ?? 0) * count
+  };
+}
+
+// Image-to-video. Animates a source image with a motion prompt.
+// Returns { videoUrl, model, durationSec, costEstimate, rawResponse }.
+export async function generateVideoFromImage({
+  model = 'kling-2.1',
+  prompt,
+  sourceImageUrl,
+  durationSec = 5,
+  aspectRatio = '9:16'
+}) {
+  const modelId = VIDEO_I2V_MODELS[model];
+  if (!modelId) throw new Error(`No image-to-video endpoint for model: ${model}. Available: ${Object.keys(VIDEO_I2V_MODELS).join(', ')}`);
+  if (!sourceImageUrl) throw new Error('sourceImageUrl is required');
+  if (!prompt) throw new Error('prompt is required (motion / what should happen in the video)');
+
+  const input = {
+    prompt,
+    image_url: sourceImageUrl,
+    duration: String(durationSec),
+    aspect_ratio: aspectRatio
+  };
+
+  const { status_url, response_url } = await submitJob(modelId, input);
+  // Video gens take longer than image — bump to 5min ceiling
+  const result = await pollJob(status_url, response_url, { maxWaitMs: 300_000, pollMs: 4000 });
+
+  const videoUrl = result.video?.url || result.videos?.[0]?.url || result.url;
+  if (!videoUrl) throw new Error(`fal video response had no video URL: ${JSON.stringify(result).slice(0, 500)}`);
+
+  return {
+    videoUrl,
+    model,
+    durationSec,
+    aspectRatio,
+    costEstimate: VIDEO_MODEL_COSTS[model] ?? null,
+    rawResponse: result
   };
 }
 

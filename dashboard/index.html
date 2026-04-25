@@ -281,10 +281,39 @@
   }
   .ad-card:hover { border-color: var(--accent); }
   .ad-card a { display: block; line-height: 0; }
-  .ad-card img {
+  .ad-card img,
+  .ad-card video {
     width: 100%;
     height: auto;
     display: block;
+  }
+  .ad-card-media { position: relative; }
+  .ad-card-media.is-video::after {
+    content: '▶';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    pointer-events: none;
+  }
+  .ad-card-play { display: none; }
+  .chat-video-link { position: relative; display: block; }
+  .chat-video-link .chat-video-play {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.7);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 11px;
+    pointer-events: none;
   }
   .ad-card-meta {
     padding: 10px 12px;
@@ -856,8 +885,8 @@ function renderBriefing(data) {
 // --- Ad gallery in the middle panel ---
 const adGalleryItems = []; // { url, label, kind }
 
-function extractImageUrls(text) {
-  const re = /(https?:\/\/[^\s<]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<]*)?)/gi;
+function extractMediaUrls(text) {
+  const re = /(https?:\/\/[^\s<]+?\.(?:png|jpg|jpeg|gif|webp|mp4|webm|mov)(?:\?[^\s<]*)?)/gi;
   const hits = [];
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -867,30 +896,37 @@ function extractImageUrls(text) {
   return [...new Set(hits)];
 }
 
-function classifyImageUrl(url) {
+function isVideoUrl(url) {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url);
+}
+
+function classifyMediaUrl(url) {
+  if (isVideoUrl(url)) {
+    if (url.includes('/videos/')) return 'video-final';
+    return 'video-variant';
+  }
   if (url.includes('/ads/')) return 'final';
   if (url.includes('fal.media') || url.includes('fal.run')) return 'variant';
   return 'image';
 }
 
 function addAdsFromResponse(text) {
-  const urls = extractImageUrls(text);
+  const urls = extractMediaUrls(text);
   if (!urls.length) return;
   let newAnyFinal = false;
   const stamp = Date.now();
   urls.forEach((url, i) => {
     if (adGalleryItems.some(it => it.url === url)) return;
-    const kind = classifyImageUrl(url);
-    if (kind === 'final') newAnyFinal = true;
-    adGalleryItems.unshift({
-      url,
-      kind,
-      label: kind === 'final' ? 'Final' : `Variant ${i + 1}`,
-      addedAt: stamp
-    });
+    const kind = classifyMediaUrl(url);
+    if (kind === 'final' || kind === 'video-final') newAnyFinal = true;
+    let label;
+    if (kind === 'final') label = 'Final';
+    else if (kind === 'video-final') label = 'Video';
+    else if (kind === 'video-variant') label = 'Video (fal)';
+    else label = `Variant ${i + 1}`;
+    adGalleryItems.unshift({ url, kind, label, addedAt: stamp });
   });
   renderAdGallery();
-  // Auto-switch to Ads tab whenever a final ad lands, or first time variants arrive.
   if (newAnyFinal || adGalleryItems.length === urls.length) {
     showMainTab('ads');
   }
@@ -908,15 +944,21 @@ function renderAdGallery() {
   }
   gallery.style.display = 'grid';
   empty.style.display = 'none';
-  gallery.innerHTML = adGalleryItems.map(item => `
-    <div class="ad-card">
-      <a href="${item.url}" target="_blank" rel="noopener"><img src="${item.url}" alt="${item.label}"></a>
-      <div class="ad-card-meta">
-        <span class="label">${item.label}${item.kind === 'final' ? ' ✓' : ''}</span>
-        <a href="${item.url}" target="_blank" rel="noopener">open ↗</a>
-      </div>
-    </div>
-  `).join('');
+  gallery.innerHTML = adGalleryItems.map(item => {
+    const isVid = isVideoUrl(item.url);
+    const media = isVid
+      ? `<video src="${item.url}#t=0.1" preload="metadata" muted></video><span class="ad-card-play">▶</span>`
+      : `<img src="${item.url}" alt="${item.label}">`;
+    const checkmark = (item.kind === 'final' || item.kind === 'video-final') ? ' ✓' : '';
+    return `
+      <div class="ad-card">
+        <a href="${item.url}" target="_blank" rel="noopener" class="ad-card-media${isVid ? ' is-video' : ''}">${media}</a>
+        <div class="ad-card-meta">
+          <span class="label">${item.label}${checkmark}</span>
+          <a href="${item.url}" target="_blank" rel="noopener">open ↗</a>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function showMainTab(tab) {
@@ -943,7 +985,12 @@ function linkify(text) {
   return chunks.map((c, i) => {
     if (i % 2 === 1) return c;
     return c.replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, (url) => {
+      const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(url);
       const isImg = /\.(png|jpg|jpeg|gif|webp)(\?|$)/i.test(url);
+      if (isVideo) {
+        // Thumbnail = first frame via #t=0.1, click opens in new tab to play
+        return `<a href="${url}" target="_blank" rel="noopener" class="chat-video-link"><video src="${url}#t=0.1" class="chat-image" preload="metadata" muted></video><span class="chat-video-play">▶ click to play</span></a>`;
+      }
       return isImg
         ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="chat-image" alt=""></a>`
         : `<a href="${url}" target="_blank" rel="noopener">${url}</a>`;

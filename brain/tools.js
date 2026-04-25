@@ -3,9 +3,10 @@ import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
 import { runPerformanceAnalyst } from '../agents/performance-analyst.js';
 import { getLatestPerformanceAnalysis } from '../store/performance-analyses.js';
-import { generateImage, generateVariants, generateVariationsFromSource, MODELS, MODEL_COSTS } from '../ads/fal-client.js';
+import { generateImage, generateVariants, generateVariationsFromSource, generateVideoFromImage, MODELS, MODEL_COSTS, VIDEO_I2V_MODELS, VIDEO_MODEL_COSTS } from '../ads/fal-client.js';
 import { persistFalVariants } from '../ads/persist.js';
 import { composeAd } from '../ads/compositor.js';
+import { downloadVideoToStorage } from '../ads/video-storage.js';
 import { getBrand, listBrandedClients } from '../ads/brands.js';
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
@@ -331,6 +332,22 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'generate_video_from_image',
+    description: 'Animate a still image into a short video ad via fal.ai image-to-video. Use AFTER Alan has a winning still ad and wants a Reels/Stories version, or wants to animate a generated image. Defaults to count=1 because video generation is expensive ($0.25–$2.50 per clip). Returns a video URL Alan can preview/download. Default model kling-2.1 (cheap baseline).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string' },
+        sourceImageUrl: { type: 'string', description: 'URL of the still image to animate. Usually a final composited ad URL or a fal-generated variant.' },
+        motion_prompt: { type: 'string', description: 'What should happen in the video. Be specific: "subject turns head slowly toward camera, wind blowing through trees, golden hour light shifting" — better than vague "make it move". Keep it subtle for ads — heavy motion looks AI.' },
+        model: { type: 'string', enum: ['kling-2.1', 'veo3-fast', 'veo3'], description: 'kling-2.1 = cheap baseline (~$0.25). veo3-fast = mid (~$0.75). veo3 = premium for finals (~$2.50). Default kling-2.1.' },
+        duration_sec: { type: 'number', description: 'Video length in seconds. Default 5. Most ad models support 5–10s; Veo supports up to 8s.' },
+        aspect_ratio: { type: 'string', enum: ['9:16', '1:1', '16:9'], description: '9:16 for Reels/Stories (default), 1:1 for feed, 16:9 for landscape.' }
+      },
+      required: ['clientId', 'sourceImageUrl', 'motion_prompt']
+    }
+  },
+  {
     name: 'composite_ad',
     description: 'Take a generated image URL and overlay headline + subtext text to produce a finished ad PNG. Use AFTER Alan picks a variant from generate_image. Returns a public URL to the composited ad hosted on Brain. Can specify position, palette overrides, and multiple text overlays.',
     input_schema: {
@@ -567,6 +584,40 @@ export async function executeTool(name, input, allClients) {
           : { index: i, imageUrl: v.imageUrl, seed: v.seed, falSourceUrl: v.falSourceUrl }),
         costEstimate: result.costEstimate,
         note: 'Show URLs to Alan. He can composite_ad on top, or feed a variant back into generate_variation for further iteration.'
+      };
+    }
+
+    case 'generate_video_from_image': {
+      const model = input.model || 'kling-2.1';
+      const durationSec = input.duration_sec ?? 5;
+      const aspectRatio = input.aspect_ratio || '9:16';
+      const result = await generateVideoFromImage({
+        model,
+        prompt: input.motion_prompt,
+        sourceImageUrl: input.sourceImageUrl,
+        durationSec,
+        aspectRatio
+      });
+      // Mirror fal's CDN copy to local storage for permanence + serving from /videos/*
+      let mirror = null;
+      try {
+        mirror = await downloadVideoToStorage({ falVideoUrl: result.videoUrl, clientId: input.clientId });
+      } catch (err) {
+        // Non-fatal — fal URL still works for ~30 days
+        console.error('[generate_video_from_image] mirror failed:', err.message);
+      }
+      return {
+        clientId: input.clientId,
+        sourceImageUrl: input.sourceImageUrl,
+        motion_prompt: input.motion_prompt,
+        model,
+        durationSec,
+        aspectRatio,
+        falVideoUrl: result.videoUrl,
+        publicUrl: mirror?.publicUrl || result.videoUrl,
+        bytes: mirror?.bytes ?? null,
+        costEstimate: result.costEstimate,
+        note: 'Show publicUrl to Alan. He can request another with different motion or escalate to veo3-fast/veo3 for a polished version.'
       };
     }
 
