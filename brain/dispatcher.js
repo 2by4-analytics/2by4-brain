@@ -140,6 +140,32 @@ async function fetchImageAsBase64(url) {
   return { mediaType, data: buf.toString('base64') };
 }
 
+// Strip image / video URLs from past assistant messages so Brain can't pattern-match
+// and replay stale URLs from chat history. Old brain.2by4llc.com/ads/... URLs 404
+// after Railway redeploys; old fal.media URLs expire after ~30 days.
+// Replacing them with a placeholder forces Brain to call the tool again
+// instead of hallucinating from the chat trail.
+function stripStaleMediaUrlsFromAssistant(messages) {
+  const mediaRe = /https?:\/\/[^\s<)]+?\.(?:png|jpg|jpeg|gif|webp|mp4|webm|mov)(?:\?[^\s<)]*)?/gi;
+  return messages.map((m) => {
+    if (m.role !== 'assistant') return m;
+    if (typeof m.content === 'string') {
+      return { ...m, content: m.content.replace(mediaRe, '[stale-media-url-stripped — call the tool again to regenerate]') };
+    }
+    if (Array.isArray(m.content)) {
+      return {
+        ...m,
+        content: m.content.map((block) =>
+          block.type === 'text'
+            ? { ...block, text: block.text.replace(mediaRe, '[stale-media-url-stripped — call the tool again to regenerate]') }
+            : block
+        )
+      };
+    }
+    return m;
+  });
+}
+
 async function expandImagesInMessages(messages) {
   const imageRe = /(https?:\/\/[^\s<]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s<]*)?)/gi;
   return Promise.all(messages.map(async (m) => {
@@ -188,8 +214,12 @@ export async function chatWithBrain(messages, clientContext = null) {
     systemPrompt += `\n\n## Current Clients\n${clientList}`;
   }
 
-  // Agentic loop — Brain can call tools multiple times before responding
-  const agentMessages = await expandImagesInMessages(messages);
+  // Agentic loop — Brain can call tools multiple times before responding.
+  // Order matters: strip stale URLs from past assistant turns BEFORE expanding
+  // current user images into vision blocks, so we don't strip URLs Alan just
+  // pasted that we want Brain to see.
+  const cleaned = stripStaleMediaUrlsFromAssistant(messages);
+  const agentMessages = await expandImagesInMessages(cleaned);
   
   while (true) {
     const response = await client.messages.create({
