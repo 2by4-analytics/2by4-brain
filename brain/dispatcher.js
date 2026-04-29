@@ -143,21 +143,24 @@ async function fetchImageAsBase64(url) {
 // Strip image / video URLs from past assistant messages so Brain can't pattern-match
 // and replay stale URLs from chat history. Old brain.2by4llc.com/ads/... URLs 404
 // after Railway redeploys; old fal.media URLs expire after ~30 days.
-// Replacing them with a placeholder forces Brain to call the tool again
-// instead of hallucinating from the chat trail.
+// Replacement is a tiny, non-instructional token — earlier versions used a sentence
+// like "[stale-media-url-stripped — call the tool again to regenerate]" but the
+// model treated that as an in-context example of what its own responses should
+// look like and started emitting it verbatim instead of calling the tool.
+const STRIPPED_URL_TOKEN = '[…]';
 function stripStaleMediaUrlsFromAssistant(messages) {
   const mediaRe = /https?:\/\/[^\s<)]+?\.(?:png|jpg|jpeg|gif|webp|mp4|webm|mov)(?:\?[^\s<)]*)?/gi;
   return messages.map((m) => {
     if (m.role !== 'assistant') return m;
     if (typeof m.content === 'string') {
-      return { ...m, content: m.content.replace(mediaRe, '[stale-media-url-stripped — call the tool again to regenerate]') };
+      return { ...m, content: m.content.replace(mediaRe, STRIPPED_URL_TOKEN) };
     }
     if (Array.isArray(m.content)) {
       return {
         ...m,
         content: m.content.map((block) =>
           block.type === 'text'
-            ? { ...block, text: block.text.replace(mediaRe, '[stale-media-url-stripped — call the tool again to regenerate]') }
+            ? { ...block, text: block.text.replace(mediaRe, STRIPPED_URL_TOKEN) }
             : block
         )
       };
