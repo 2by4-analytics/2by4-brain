@@ -12,7 +12,7 @@ For the full agency context (clients, metrics, infrastructure), see the top-leve
 ├── brain/
 │   ├── dispatcher.js      # Claude API + agentic tool loop + vision on uploaded images
 │   └── tools.js           # All tool definitions and executors
-├── agents/                # creative-gen, creative-analyst, performance-analyst, cpa-monitor
+├── agents/                # creative-gen, creative-analyst, performance-analyst, cpa-monitor, meeting-recap
 ├── ads/                   # fal-client, compositor, brands config, bundled OFL fonts
 ├── scheduler/             # morning briefing (7am CT), creative-scheduler, performance-scheduler
 ├── store/                 # briefings, creative-analyses, performance-analyses (JSON files)
