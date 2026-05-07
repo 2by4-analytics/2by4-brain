@@ -11,6 +11,7 @@ import { initPerformanceScheduler } from './scheduler/performance-scheduler.js';
 import { chatWithBrain } from './brain/dispatcher.js';
 import { getLatestBriefing, getAllBriefings } from './store/briefings.js';
 import { fetchClients, clearClientCache } from './config/clients.js';
+import { summarizeMeeting } from './agents/meeting-recap.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -22,6 +23,15 @@ app.use('/videos', express.static(path.resolve(process.env.VIDEOS_STORAGE_DIR ||
 
 // Auth middleware (matches existing claude-dash pattern)
 const auth = (req, res, next) => next();
+
+// Service-to-service auth: dash → brain calls. Header `x-dash-password` must
+// match DASH_PASSWORD env var. Used only by /api/agents/* (no UI fallback).
+function serviceAuth(req, res, next) {
+  const expected = process.env.DASH_PASSWORD;
+  if (!expected) return res.status(500).json({ error: 'DASH_PASSWORD not configured on Brain' });
+  if (req.headers['x-dash-password'] !== expected) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
 
 // Dashboard home
 app.get('/', auth, (req, res) => {
@@ -86,6 +96,19 @@ app.get('/api/clients-list', auth, async (req, res) => {
     const clients = await fetchClients();
     res.json(clients);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Meeting recap — called by claude-dash launchpad upload flow.
+// Body: { clientName, fileText?, fileBase64?, fileMimeType?, todayDate? }
+// Returns: { recapMarkdown, openItems[] }
+app.post('/api/agents/meeting-recap', serviceAuth, async (req, res) => {
+  try {
+    const out = await summarizeMeeting(req.body || {});
+    res.json(out);
+  } catch (err) {
+    console.error('Meeting recap error:', err);
     res.status(500).json({ error: err.message });
   }
 });
