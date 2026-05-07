@@ -73,9 +73,13 @@ export function getBrand(clientId) {
 }
 
 export function listBrandedClients() {
+  // All branded clients in this map are sticker — shed ad-gen isn't wired into
+  // Brain yet (shed creative lives in 2by4-sheds workflows). Surfacing `type`
+  // here keeps consumers from re-deriving it from a parallel hardcoded list.
   return Object.entries(BRANDS).map(([id, b]) => ({
     id,
     name: b.name,
+    type: 'sticker',
     configured: b.vibe !== 'TODO' && b.vibe !== '—'
   }));
 }

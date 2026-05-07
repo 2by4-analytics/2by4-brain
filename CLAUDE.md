@@ -32,7 +32,8 @@ Brain calls Dash for data. Brain never hits Meta or CoC directly.
 │   ├── creative-gen.js            # Generates 3 hooks, 3 primary texts, image prompt (text only)
 │   ├── creative-analyst.js        # Scores ads SCALE/MONITOR/PAUSE; auto-triggers creative gen on PAUSE
 │   ├── performance-analyst.js     # Daily performance analysis per sticker client
-│   └── cpa-monitor.js             # CPA monitoring (in progress)
+│   ├── cpa-monitor.js             # CPA monitoring (in progress)
+│   └── meeting-recap.js           # Summarize uploaded meeting notes → recap markdown + action items
 ├── ads/
 │   ├── brands.js                  # Per-client ad brand config (palette, font, vibe, base prompt hints)
 │   ├── fal-client.js              # fal.ai HTTP wrapper — text-to-image + image-to-image via queue API
@@ -93,6 +94,18 @@ PORT=3001
 - `fbGet` has a 25-second `AbortController` timeout in `meta/index.js`
 
 **Agent output pattern:** Agents receive client config + data → return structured output → stored in `/store/` → surfaced via chat or briefing.
+
+**Client type sourcing:** Dash's `CLIENTS` env var is sticker-only — shed clients live in the separate `2by4-sheds` service. Brain's `config/clients.js` therefore tags every client fetched from dash as `type: 'sticker'`. Don't hardcode "this client is a shed" lists in Brain — if shed clients ever land in dash, add a `type` field to dash's `/api/clients` response and read it instead.
+
+---
+
+## HTTP API (called by other services)
+
+Most Brain capability is exposed via the agentic chat loop. A few fixed-shape endpoints exist for service-to-service calls:
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /api/agents/meeting-recap` | `x-dash-password` (must match `DASH_PASSWORD`) | Body `{ clientName, fileText? \| fileBase64+fileMimeType, todayDate? }` → returns `{ recapMarkdown, openItems[] }`. Used by claude-dash launchpad's upload flow. PDFs are passed as Anthropic document blocks; markdown/text inline. Sonnet 4.6 with prompt-cached system. |
 
 ---
 

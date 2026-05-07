@@ -1,18 +1,19 @@
 let cachedClients = null;
 
-const SHED_IDS = ['craig-revmoto-mmjeuw8s', 'craig-readynation-mmkodtu2'];
-
+// Dash's `CLIENTS` env var holds sticker-funnel clients only — shed clients
+// live in the separate 2by4-sheds service. So every client we get from
+// /api/clients is a sticker. If shed clients ever land in dash, expose a
+// `type` field on /api/clients and read it here instead of hardcoding.
 function normalizeClients(rawClients) {
   const clients = {};
   for (const c of rawClients) {
-    const isShed = SHED_IDS.includes(c.id);
     clients[c.id] = {
       name: c.name,
-      type: isShed ? 'shed' : 'sticker',
+      type: 'sticker',
       timezone: c.timezone || 'America/Chicago',
       cppTarget: c.adAccounts?.[0]?.cppTarget || 18,
       metaAccountId: c.adAccounts?.[0]?.fbAdAccountId || null, // e.g. "act_123456789"
-      platform: isShed ? ['meta', 'google'] : ['meta'],
+      platform: ['meta'],
       adAccounts: c.adAccounts || [],
       active: true
     };
