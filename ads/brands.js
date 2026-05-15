@@ -62,7 +62,7 @@ export const BRANDS = {
   'taylor-usago-mp5nblk8': {
     name: 'Taylor – USAGO',
     vibe: 'Dark, moody, masculine 2A. Patriotic without ragebait. Responsibility, brotherhood, training, preparedness. Test-Great-Gear-style product hero with bold headline + amber accent.',
-    basePromptHints: 'dark moody background, dramatic side light, bold white headline, amber/orange accent, product hero, gritty patriotic tone, editorial ad aesthetic',
+    basePromptHints: 'dark moody background, bold white headline, amber/orange accent, product hero, gritty patriotic tone, editorial ad aesthetic',
     avoid: 'overtly political bait, ragebait, tactical-cosplay, mall-ninja, suburban settings, smiling stock-photo feel, freebie/giveaway framing',
     palette: { overlay: '#0a0a0a', headline: '#ffffff', sub: '#ffb347' },
     font: { headline: 'oswald', sub: 'inter' },
