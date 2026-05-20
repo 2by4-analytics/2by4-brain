@@ -226,7 +226,7 @@ export async function chatWithBrain(messages, clientContext = null) {
   
   while (true) {
     const response = await client.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
       max_tokens: 2048,
       system: systemPrompt,
       tools: TOOL_DEFINITIONS,
