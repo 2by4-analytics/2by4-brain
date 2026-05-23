@@ -20,6 +20,7 @@ app.use(express.static(path.join(__dirname, 'dashboard')));
 app.use('/ads', express.static(path.resolve(process.env.ADS_STORAGE_DIR || './data/ads')));
 app.use('/uploads', express.static(path.resolve(process.env.UPLOADS_STORAGE_DIR || './data/uploads')));
 app.use('/videos', express.static(path.resolve(process.env.VIDEOS_STORAGE_DIR || './data/videos')));
+app.use('/reports', express.static(path.resolve(process.env.REPORTS_STORAGE_DIR || './data/reports')));
 
 // Auth middleware (matches existing claude-dash pattern)
 const auth = (req, res, next) => next();

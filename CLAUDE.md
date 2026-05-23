@@ -56,7 +56,8 @@ Brain calls Dash for data. Brain never hits Meta or CoC directly.
 └── data/                          # Runtime storage (gitignored, MUST be on a persistent volume — see "Storage" below)
     ├── ads/<clientId>/             # Composited ads + persisted variants, served at /ads/*
     ├── uploads/                    # User-uploaded images, served at /uploads/*
-    └── videos/<clientId>/          # Generated videos (mp4), served at /videos/*
+    ├── videos/<clientId>/          # Generated videos (mp4), served at /videos/*
+    └── reports/                    # Generated PDF reports (shed clients), served at /reports/*
 ```
 
 ---
@@ -73,6 +74,8 @@ BRAIN_PUBLIC_URL=         # e.g. https://brain.2by4llc.com — base for /ads, /u
 ADS_STORAGE_DIR=          # path to persistent volume for composited ads + variants — e.g. /data/ads
 UPLOADS_STORAGE_DIR=      # path to persistent volume for user uploads — e.g. /data/uploads
 VIDEOS_STORAGE_DIR=       # path to persistent volume for generated videos — e.g. /data/videos
+REPORTS_STORAGE_DIR=      # path to persistent volume for generated PDF reports — e.g. /data/reports
+SHEDS_URL=                # optional; defaults to https://sheds.2by4llc.com — base for /api/report calls
 PORT=3001
 ```
 
@@ -145,6 +148,7 @@ Brain exposes these tools to Claude via the agentic loop in `brain/dispatcher.js
 - `analyze_creatives(clientId, days?)` — live creative analysis pipeline
 - `get_creative_analysis(clientId)` — last stored creative analysis
 - `run_creative_generator(clientId, brief)` — generate 3 hooks / 3 primary texts / 1 image prompt (text only — no image gen)
+- `generate_client_report(clientName, startDate, endDate)` — generate a one-page Meta performance PDF for a shed client, return a download URL (calls `sheds.2by4llc.com/api/report`)
 
 ### Ad image generation
 - `list_ad_brands()` — show which clients have brand profiles configured + available models (nano-banana-2, flux-dev, flux-pro, gpt-image-2)
@@ -177,9 +181,10 @@ Two fundamentally different paths, and Brain should ask which one before generat
 - Uploads → `data/uploads/<hash>.<ext>` → served at `/uploads/*`
 - Composited ads + persisted fal variants → `data/ads/<clientId>/...` → served at `/ads/*`
 - Generated videos → `data/videos/<clientId>/<timestamp>.mp4` → served at `/videos/*`
+- Generated PDF reports → `data/reports/<clientSlug>-<start>-<end>.pdf` → served at `/reports/*`
 - Fal-generated variants are also persisted to Brain's disk via `ads/persist.js` so the URLs survive past fal's ~30-day CDN window
 
-All paths configurable via `ADS_STORAGE_DIR`, `UPLOADS_STORAGE_DIR`, `VIDEOS_STORAGE_DIR`.
+All paths configurable via `ADS_STORAGE_DIR`, `UPLOADS_STORAGE_DIR`, `VIDEOS_STORAGE_DIR`, `REPORTS_STORAGE_DIR`.
 
 ### Railway Volume — REQUIRED for persistence
 
@@ -190,7 +195,7 @@ All paths configurable via `ADS_STORAGE_DIR`, `UPLOADS_STORAGE_DIR`, `VIDEOS_STO
 **Production setup on Railway:**
 1. Service Settings → Volumes → New Volume
 2. Mount path: `/data`
-3. Set env vars: `ADS_STORAGE_DIR=/data/ads`, `UPLOADS_STORAGE_DIR=/data/uploads`, `VIDEOS_STORAGE_DIR=/data/videos`
+3. Set env vars: `ADS_STORAGE_DIR=/data/ads`, `UPLOADS_STORAGE_DIR=/data/uploads`, `VIDEOS_STORAGE_DIR=/data/videos`, `REPORTS_STORAGE_DIR=/data/reports`
 4. Redeploy
 
 After this, files survive deploys indefinitely and brain URLs stay valid.

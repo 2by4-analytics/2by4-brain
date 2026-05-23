@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+import path from 'path';
 import { runCreativeGenerator } from '../agents/creative-gen.js';
 import { runCreativeAnalyst } from '../agents/creative-analyst.js';
 import { getLatestCreativeAnalysis } from '../store/creative-analyses.js';
@@ -8,6 +10,14 @@ import { persistFalVariants } from '../ads/persist.js';
 import { composeAd } from '../ads/compositor.js';
 import { downloadVideoToStorage } from '../ads/video-storage.js';
 import { getBrand, listBrandedClients } from '../ads/brands.js';
+
+const SHEDS_URL = process.env.SHEDS_URL || 'https://sheds.2by4llc.com';
+const REPORTS_DIR = path.resolve(process.env.REPORTS_STORAGE_DIR || './data/reports');
+const PUBLIC_BASE = (process.env.BRAIN_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`).replace(/\/$/, '');
+
+function slugify(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'client';
+}
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 const DASH_REPO = '2by4-analytics/claude-dash';
@@ -394,6 +404,28 @@ export const TOOL_DEFINITIONS = [
       },
       required: ['clientId']
     }
+  },
+  {
+    name: 'generate_client_report',
+    description: 'Generate a one-page Meta performance PDF report for a shed client over a date range. Returns a download URL for the PDF (hosted on Brain). Use when Alan asks for a "report" or "summary" for a specific shed client and date range. For a full month use first–last day of the month; for MTD use first-of-month → today.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        clientName: {
+          type: 'string',
+          description: 'Shed client name (e.g. "RevMoto", "ReadyNation", "Twin City Barns"). Brain will fuzzy-match against the shed client list.'
+        },
+        startDate: {
+          type: 'string',
+          description: 'YYYY-MM-DD. First day of the reporting window.'
+        },
+        endDate: {
+          type: 'string',
+          description: 'YYYY-MM-DD. Last day of the reporting window (inclusive).'
+        }
+      },
+      required: ['clientName', 'startDate', 'endDate']
+    }
   }
 ];
 
@@ -682,6 +714,49 @@ export async function executeTool(name, input, allClients) {
       const analysis = await getLatestCreativeAnalysis(input.clientId);
       if (!analysis) return { message: `No stored creative analysis found for ${input.clientId}. Use analyze_creatives to run a fresh analysis.` };
       return analysis;
+    }
+
+    case 'generate_client_report': {
+      const { clientName, startDate, endDate } = input;
+      const sheds = Object.entries(allClients)
+        .filter(([, c]) => c.type === 'shed')
+        .map(([id, c]) => ({ id, ...c }));
+      const needle = clientName.toLowerCase();
+      const match = sheds.find(c => c.name.toLowerCase().includes(needle))
+        || sheds.find(c => needle.includes(c.name.toLowerCase()));
+      if (!match) {
+        return { error: `No shed client matching "${clientName}". Available: ${sheds.map(c => c.name).join(', ') || '(none)'}` };
+      }
+      if (!match.metaAccountId) {
+        return { error: `${match.name} has no Meta ad account on file — can't generate report.` };
+      }
+
+      const url = `${SHEDS_URL}/api/report?accountId=${encodeURIComponent(match.metaAccountId)}&startDate=${startDate}&endDate=${endDate}`;
+      const t0 = Date.now();
+      const res = await fetch(url, { headers: { 'x-dash-password': process.env.DASH_PASSWORD || '' } });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        return { error: `Sheds /api/report returned ${res.status}: ${body.slice(0, 300)}` };
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const tFetch = Date.now() - t0;
+
+      await fs.mkdir(REPORTS_DIR, { recursive: true });
+      const filename = `${slugify(match.name)}-${startDate}-${endDate}.pdf`;
+      const filePath = path.join(REPORTS_DIR, filename);
+      await fs.writeFile(filePath, buffer);
+
+      const pdfUrl = `${PUBLIC_BASE}/reports/${filename}`;
+      console.log(`[generate_client_report] ${match.name} ${startDate}→${endDate} fetched=${tFetch}ms size=${buffer.length}b → ${pdfUrl}`);
+      return {
+        success: true,
+        clientId: match.id,
+        clientName: match.name,
+        startDate,
+        endDate,
+        pdfUrl,
+        sizeKb: Math.round(buffer.length / 1024)
+      };
     }
 
     default:
