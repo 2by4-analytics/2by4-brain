@@ -68,6 +68,15 @@ export const BRANDS = {
     font: { headline: 'oswald', sub: 'inter' },
     overlayPosition: 'bottom'
   },
+  'rob-vintage-horror-mpil2p1b': {
+    name: 'Rob – Vintage Horror',
+    vibe: 'Vintage VHS-era horror. Blue-teal or B&W moody base — haunted houses, foggy forests, bedroom/POV monster scenes, snowy TV static (Poltergeist nod). Licensed-franchise iconography (F13, Halloween, Nightmare, Beetlejuice, Saw, Terrifier). Treat the source material with reverence — never campy, never parody. Cult-classic horror-movie-poster aesthetic with a "casting call / horror fans wanted" recruit hook.',
+    basePromptHints: 'cool blue-teal or desaturated B&W moody base, vintage 80s horror movie poster, slasher franchise iconography, dripping paint or red-banner overlay typography, hand-painted distressed lettering, skull badge top-right, "test and keep merch" reinforcement, midnight movie / VHS-rental aesthetic, fog and neon, practical-effects feel',
+    avoid: 'campy, cartoony, parody, jokey, ironic horror, bright cheerful palette, smiling subjects, modern clean ecom aesthetic, generic Halloween costume vibe',
+    palette: { overlay: '#050207', headline: '#c9f048', sub: '#e63946' },
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
 
   // Sticker clients without confirmed brand profiles — fill in as we learn the niche.
   'client2':                    { ...DEFAULT, name: 'Jorge',               vibe: 'TODO' },
