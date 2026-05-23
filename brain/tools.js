@@ -19,6 +19,22 @@ function slugify(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'client';
 }
 
+// Shed clients live in the separate 2by4-sheds service (not in Brain's
+// fetchClients / dash). Fetch them on demand for tools that need them.
+async function fetchShedClients() {
+  const res = await fetch(`${SHEDS_URL}/api/clients`, {
+    headers: { 'x-dash-password': process.env.DASH_PASSWORD || '' }
+  });
+  if (!res.ok) throw new Error(`Sheds /api/clients returned ${res.status}`);
+  const data = await res.json();
+  const raw = Array.isArray(data) ? data : (data.clients || []);
+  return raw.map(c => ({
+    id: c.id,
+    name: c.name,
+    accountId: c.accountId || c.adAccounts?.[0]?.fbAdAccountId || c.adAccounts?.[0]?.accountId || null
+  }));
+}
+
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://dash.2by4llc.com';
 const DASH_REPO = '2by4-analytics/claude-dash';
 const DASH_BRANCH = 'main';
@@ -718,20 +734,23 @@ export async function executeTool(name, input, allClients) {
 
     case 'generate_client_report': {
       const { clientName, startDate, endDate } = input;
-      const sheds = Object.entries(allClients)
-        .filter(([, c]) => c.type === 'shed')
-        .map(([id, c]) => ({ id, ...c }));
+      let sheds;
+      try {
+        sheds = await fetchShedClients();
+      } catch (err) {
+        return { error: `Couldn't load shed client list from Sheds: ${err.message}` };
+      }
       const needle = clientName.toLowerCase();
       const match = sheds.find(c => c.name.toLowerCase().includes(needle))
         || sheds.find(c => needle.includes(c.name.toLowerCase()));
       if (!match) {
         return { error: `No shed client matching "${clientName}". Available: ${sheds.map(c => c.name).join(', ') || '(none)'}` };
       }
-      if (!match.metaAccountId) {
+      if (!match.accountId) {
         return { error: `${match.name} has no Meta ad account on file — can't generate report.` };
       }
 
-      const url = `${SHEDS_URL}/api/report?accountId=${encodeURIComponent(match.metaAccountId)}&startDate=${startDate}&endDate=${endDate}`;
+      const url = `${SHEDS_URL}/api/report?accountId=${encodeURIComponent(match.accountId)}&startDate=${startDate}&endDate=${endDate}`;
       const t0 = Date.now();
       const res = await fetch(url, { headers: { 'x-dash-password': process.env.DASH_PASSWORD || '' } });
       if (!res.ok) {
