@@ -38,6 +38,49 @@ app.use('/uploads', express.static(STORAGE.UPLOADS.path));
 app.use('/videos',  express.static(STORAGE.VIDEOS.path));
 app.use('/reports', express.static(STORAGE.REPORTS.path));
 
+// Startup probe — confirm each storage dir is mkdir-able + write+read+delete-able.
+// "[storage] X: ... [✓ env-set]" only proves the env var exists; it doesn't prove
+// the path is actually writable or that files persist. The probe catches both
+// "dir is read-only" and "mkdir succeeds but writeFile silently does nothing".
+(async () => {
+  for (const [name, s] of Object.entries(STORAGE)) {
+    try {
+      await fs.mkdir(s.path, { recursive: true });
+      const probe = path.join(s.path, '__startup_probe.txt');
+      await fs.writeFile(probe, `boot:${Date.now()}`);
+      const back = await fs.readFile(probe, 'utf8');
+      await fs.unlink(probe);
+      const entries = await fs.readdir(s.path);
+      console.log(`[storage] ${name}: probe OK (read back "${back.slice(0, 20)}…"), ${entries.length} entries in dir`);
+    } catch (err) {
+      console.log(`[storage] ${name}: probe FAILED — ${err.message}`);
+    }
+  }
+})();
+
+// Debug endpoint — list what's actually on disk in each storage dir.
+// Use to diagnose "Brain returned a URL but it 404s" — confirms whether the
+// file exists, when it was written, and that the server's view of disk matches
+// the URL path being requested.
+app.get('/api/debug/storage', auth, async (req, res) => {
+  const out = {};
+  for (const [name, s] of Object.entries(STORAGE)) {
+    try {
+      const stat = await fs.stat(s.path).catch(() => null);
+      const entries = stat?.isDirectory() ? await fs.readdir(s.path, { withFileTypes: true }) : [];
+      out[name] = {
+        path: s.path,
+        envSet: s.envSet,
+        exists: !!stat,
+        entries: entries.slice(0, 50).map(e => ({ name: e.name, dir: e.isDirectory() }))
+      };
+    } catch (err) {
+      out[name] = { path: s.path, envSet: s.envSet, error: err.message };
+    }
+  }
+  res.json(out);
+});
+
 // Auth middleware (matches existing claude-dash pattern)
 const auth = (req, res, next) => next();
 
