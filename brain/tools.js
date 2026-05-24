@@ -119,6 +119,38 @@ function getDateRange(period) {
   }
 }
 
+// Build a fully-formatted reply note for image-gen tools. The note tells Brain
+// EXACTLY what to write to Alan, with URLs already interpolated, so the model
+// only has to copy the suggested format. Without this, Brain has been writing
+// "V1:", "V2:", "V3:" with empty placeholders even when the tool_result clearly
+// contains imageUrl strings — an imitation-pattern from prior stripped turns
+// that the no-fabrication rule alone couldn't override.
+function buildVariantReplyNote(variants, costEstimate, opts = {}) {
+  const success = variants.filter(v => !v.error).length;
+  const failed = variants.length - success;
+  const lines = variants.map((v, i) => v.error
+    ? `V${i + 1} failed: ${v.error}`
+    : `V${i + 1}: ${v.imageUrl}`);
+  const cost = typeof costEstimate === 'number' ? `~$${costEstimate.toFixed(2)}` : '';
+  const summary = failed === variants.length
+    ? `All ${variants.length} variants failed.`
+    : `Done. ${success} variant${success === 1 ? '' : 's'}${cost ? `, ${cost}` : ''}.`;
+  const trailer = opts.trailer
+    ? ` ${opts.trailer}`
+    : success > 0
+      ? ' After Alan picks one, call composite_ad with the sourceImageUrl.'
+      : '';
+  return [
+    'Reply to Alan with the following text VERBATIM (URLs included literally, do not abbreviate, do not replace with "[…]" or empty colons):',
+    '',
+    summary,
+    ...lines,
+    success > 0 ? 'How do they look?' : 'How should I proceed?',
+    '',
+    `If you cannot emit the URLs above for any reason, say "tool returned but dispatcher cannot read URLs — see Brain logs" and stop. NEVER make up URLs.${trailer}`
+  ].join('\n');
+}
+
 export const TOOL_DEFINITIONS = [
   {
     name: 'get_performance',
@@ -571,25 +603,24 @@ export async function executeTool(name, input, allClients) {
       const successCount = variants.filter(v => !v.error).length;
       const errorCount = variants.filter(v => v.error).length;
       console.log(`[generate_image] client=${input.clientId} model=${model} aspect=${aspectRatio} count=${count} fal=${tFal}ms total=${tTotal}ms success=${successCount} errors=${errorCount}`);
+      const igOut = variants.map((v, i) => v.error
+        ? { index: i, error: v.error }
+        : {
+            index: i,
+            imageUrl: v.imageUrl,
+            falSourceUrl: v.falSourceUrl,
+            seed: v.seed,
+            ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+          });
       return {
         clientId: input.clientId,
         prompt: input.prompt,
         model,
         aspectRatio,
-        variants: variants.map((v, i) => v.error
-          ? { index: i, error: v.error }
-          : {
-              index: i,
-              imageUrl: v.imageUrl,
-              falSourceUrl: v.falSourceUrl,
-              seed: v.seed,
-              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
-            }),
+        variants: igOut,
         costEstimate: result.costEstimate,
         _diagnostic: { falMs: tFal, totalMs: tTotal, success: successCount, errors: errorCount },
-        note: errorCount > 0
-          ? `${errorCount} variant(s) failed. Tell Alan exactly which failed and the error. NEVER fabricate URLs for failed variants.`
-          : 'Show the actual URLs from this response to Alan. After he picks one, call composite_ad with the sourceImageUrl. NEVER make up URLs — only use the strings present in this tool result.'
+        note: buildVariantReplyNote(igOut, result.costEstimate)
       };
     }
 
@@ -621,23 +652,24 @@ export async function executeTool(name, input, allClients) {
 
       const result = await generateVariants({ model, prompt, aspectRatio, count });
       const variants = await persistFalVariants(input.clientId, result.variants);
+      const fullOut = variants.map((v, i) => v.error
+        ? { index: i, error: v.error }
+        : {
+            index: i,
+            imageUrl: v.imageUrl,
+            falSourceUrl: v.falSourceUrl,
+            seed: v.seed,
+            ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+          });
       return {
         clientId: input.clientId,
         mode: 'baked-text',
         prompt,
         model,
         aspectRatio,
-        variants: variants.map((v, i) => v.error
-          ? { index: i, error: v.error }
-          : {
-              index: i,
-              imageUrl: v.imageUrl,
-              falSourceUrl: v.falSourceUrl,
-              seed: v.seed,
-              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
-            }),
+        variants: fullOut,
         costEstimate: result.costEstimate,
-        note: 'Text is baked into each variant. Show URLs to Alan — no composite_ad needed unless he wants additional overlay on top.'
+        note: buildVariantReplyNote(fullOut, result.costEstimate, { trailer: 'Text is baked in — no composite_ad needed unless Alan wants extra overlay.' })
       };
     }
 
@@ -651,22 +683,23 @@ export async function executeTool(name, input, allClients) {
         count
       });
       const variants = await persistFalVariants(input.clientId, result.variants);
+      const varOut = variants.map((v, i) => v.error
+        ? { index: i, error: v.error }
+        : {
+            index: i,
+            imageUrl: v.imageUrl,
+            falSourceUrl: v.falSourceUrl,
+            seed: v.seed,
+            ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
+          });
       return {
         clientId: input.clientId,
         sourceImageUrl: input.sourceImageUrl,
         instruction: input.instruction,
         model,
-        variants: variants.map((v, i) => v.error
-          ? { index: i, error: v.error }
-          : {
-              index: i,
-              imageUrl: v.imageUrl,
-              falSourceUrl: v.falSourceUrl,
-              seed: v.seed,
-              ...(v.persistenceError ? { persistenceWarning: `Brain disk persistence failed (${v.persistenceError}); imageUrl is the fal CDN URL — works for ~30 days but won't survive past then.` } : {})
-            }),
+        variants: varOut,
         costEstimate: result.costEstimate,
-        note: 'Show URLs to Alan. He can composite_ad on top, or feed a variant back into generate_variation for further iteration.'
+        note: buildVariantReplyNote(varOut, result.costEstimate, { trailer: 'Alan can composite_ad on top, or feed one back into generate_variation for further iteration.' })
       };
     }
 

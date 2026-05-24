@@ -281,6 +281,14 @@ export async function chatWithBrain(messages, clientContext = null) {
         })
       );
 
+      // Log tool results so we can diagnose "model said success but I see no URL"
+      // bugs from Railway logs alone — without this we're guessing about what
+      // the model actually received.
+      for (const tr of toolResults) {
+        const preview = (tr.content || '').slice(0, 800);
+        console.log(`[Brain] tool_result tool_use_id=${tr.tool_use_id}${tr.is_error ? ' ERROR' : ''}: ${preview}${tr.content?.length > 800 ? '…[truncated]' : ''}`);
+      }
+
       // Add tool results to message history and loop
       agentMessages.push({ role: 'user', content: toolResults });
       continue;
@@ -288,6 +296,8 @@ export async function chatWithBrain(messages, clientContext = null) {
 
     // Brain is done — return the text response
     const textBlock = response.content.find(b => b.type === 'text');
-    return textBlock?.text || 'No response';
+    const finalText = textBlock?.text || 'No response';
+    console.log(`[Brain] final response (${finalText.length} chars): ${finalText.slice(0, 800)}${finalText.length > 800 ? '…[truncated]' : ''}`);
+    return finalText;
   }
 }
