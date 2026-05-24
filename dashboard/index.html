@@ -1154,7 +1154,7 @@ function linkify(text) {
         return `<a href="${url}" target="_blank" rel="noopener" class="chat-video-link"><video src="${url}#t=0.1" class="chat-image" preload="metadata" muted></video><span class="chat-video-play">▶ click to play</span></a>`;
       }
       return isImg
-        ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="chat-image" alt=""></a>`
+        ? `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" class="chat-image" alt="${url}" onerror="this.outerHTML='<a href=&quot;${url}&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;>${url}</a> (404 — file gone)'"></a>`
         : `<a href="${url}" target="_blank" rel="noopener">${url}</a>`;
     });
   }).join('');
