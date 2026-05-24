@@ -242,7 +242,21 @@ export async function chatWithBrain(messages, clientContext = null) {
   // pasted that we want Brain to see.
   const cleaned = stripStaleMediaUrlsFromAssistant(messages);
   const agentMessages = await expandImagesInMessages(cleaned);
-  
+
+  // Track every URL that appears in tool_results this turn. After the model's
+  // final response, any URL the model emits that isn't in this set is a
+  // hallucination — replace it with a loud marker so Alan sees the fabrication
+  // instead of a broken image. Catches the "model pattern-matches V1: <url>
+  // from past turns and fills in plausible URLs without calling the tool"
+  // failure mode that surfaced 2026-05-24.
+  const toolResultUrls = new Set();
+  const urlExtractRe = /https?:\/\/[^\s<)"']+/gi;
+  const trackUrlsFrom = (text) => {
+    if (!text) return;
+    for (const m of text.matchAll(urlExtractRe)) toolResultUrls.add(m[0]);
+  };
+  let toolCallsThisTurn = 0;
+
   while (true) {
     const response = await client.messages.create({
       model: 'claude-opus-4-7',
@@ -281,13 +295,13 @@ export async function chatWithBrain(messages, clientContext = null) {
         })
       );
 
-      // Log tool results so we can diagnose "model said success but I see no URL"
-      // bugs from Railway logs alone — without this we're guessing about what
-      // the model actually received.
+      // Log tool results + track all URLs the model is *allowed* to emit.
       for (const tr of toolResults) {
         const preview = (tr.content || '').slice(0, 800);
         console.log(`[Brain] tool_result tool_use_id=${tr.tool_use_id}${tr.is_error ? ' ERROR' : ''}: ${preview}${tr.content?.length > 800 ? '…[truncated]' : ''}`);
+        trackUrlsFrom(tr.content);
       }
+      toolCallsThisTurn += toolResults.length;
 
       // Add tool results to message history and loop
       agentMessages.push({ role: 'user', content: toolResults });
@@ -296,8 +310,33 @@ export async function chatWithBrain(messages, clientContext = null) {
 
     // Brain is done — return the text response
     const textBlock = response.content.find(b => b.type === 'text');
-    const finalText = textBlock?.text || 'No response';
-    console.log(`[Brain] final response (${finalText.length} chars): ${finalText.slice(0, 800)}${finalText.length > 800 ? '…[truncated]' : ''}`);
+    let finalText = textBlock?.text || 'No response';
+    console.log(`[Brain] final response (${finalText.length} chars, tool_calls_this_turn=${toolCallsThisTurn}, allowed_urls=${toolResultUrls.size}): ${finalText.slice(0, 800)}${finalText.length > 800 ? '…[truncated]' : ''}`);
+
+    // Hallucination guard: any URL the model emits that did NOT appear in
+    // any tool_result this turn is fabricated. Replace it loudly so Alan
+    // sees the truth instead of a broken image. Skip URLs from the chat-
+    // history (preserved Brain-hosted URLs are OK to mention) by checking
+    // against past-message URLs too — but only the current turn matters
+    // for new image-gen output.
+    const fabricated = [];
+    finalText = finalText.replace(urlExtractRe, (url) => {
+      const trimmed = url.replace(/[.,;:!?)\]]+$/, '');
+      if (toolResultUrls.has(trimmed) || toolResultUrls.has(url)) return url;
+      // Allow URLs that point to Brain itself if they appeared earlier in
+      // the chat (preserved by strip). Otherwise: fabrication.
+      const pastChatHasIt = messages.some(m => {
+        const s = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        return s.includes(trimmed);
+      });
+      if (pastChatHasIt) return url;
+      fabricated.push(trimmed);
+      return `[FABRICATED-URL-REMOVED: ${trimmed}]`;
+    });
+    if (fabricated.length) {
+      console.warn(`[Brain] ⚠ Replaced ${fabricated.length} fabricated URL(s) from final response: ${fabricated.slice(0, 5).join(' | ')}${fabricated.length > 5 ? ` (+${fabricated.length - 5} more)` : ''}`);
+      finalText += `\n\n_(Brain: ${fabricated.length} URL${fabricated.length === 1 ? ' was' : 's were'} fabricated and removed by the hallucination guard. The tool either was not called or returned no URLs — check Railway logs for [Brain] tool_result lines.)_`;
+    }
     return finalText;
   }
 }
