@@ -17,10 +17,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'dashboard')));
-app.use('/ads', express.static(path.resolve(process.env.ADS_STORAGE_DIR || './data/ads')));
-app.use('/uploads', express.static(path.resolve(process.env.UPLOADS_STORAGE_DIR || './data/uploads')));
-app.use('/videos', express.static(path.resolve(process.env.VIDEOS_STORAGE_DIR || './data/videos')));
-app.use('/reports', express.static(path.resolve(process.env.REPORTS_STORAGE_DIR || './data/reports')));
+
+// Resolve storage paths once + log them at startup. When ADS_STORAGE_DIR (etc.)
+// is unset the path falls back to ./data/ads which is EPHEMERAL on Railway —
+// every redeploy wipes it and the URLs Brain returned to the model 404 for the
+// user. Logging the resolved paths + env-set status here makes that diagnosable
+// from the boot log alone instead of "why are old images broken" detective work.
+const STORAGE = {
+  ADS:     { path: path.resolve(process.env.ADS_STORAGE_DIR     || './data/ads'),     envSet: !!process.env.ADS_STORAGE_DIR },
+  UPLOADS: { path: path.resolve(process.env.UPLOADS_STORAGE_DIR || './data/uploads'), envSet: !!process.env.UPLOADS_STORAGE_DIR },
+  VIDEOS:  { path: path.resolve(process.env.VIDEOS_STORAGE_DIR  || './data/videos'),  envSet: !!process.env.VIDEOS_STORAGE_DIR },
+  REPORTS: { path: path.resolve(process.env.REPORTS_STORAGE_DIR || './data/reports'), envSet: !!process.env.REPORTS_STORAGE_DIR }
+};
+for (const [name, s] of Object.entries(STORAGE)) {
+  const flag = s.envSet ? '✓ env-set' : '⚠ DEFAULT (likely EPHEMERAL — wiped on redeploy)';
+  console.log(`[storage] ${name}: ${s.path} [${flag}]`);
+}
+app.use('/ads',     express.static(STORAGE.ADS.path));
+app.use('/uploads', express.static(STORAGE.UPLOADS.path));
+app.use('/videos',  express.static(STORAGE.VIDEOS.path));
+app.use('/reports', express.static(STORAGE.REPORTS.path));
 
 // Auth middleware (matches existing claude-dash pattern)
 const auth = (req, res, next) => next();
