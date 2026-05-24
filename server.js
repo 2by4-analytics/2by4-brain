@@ -58,6 +58,9 @@ app.use('/reports', express.static(STORAGE.REPORTS.path));
   }
 })();
 
+// Auth middleware (matches existing claude-dash pattern)
+const auth = (req, res, next) => next();
+
 // Debug endpoint — list what's actually on disk in each storage dir.
 // Use to diagnose "Brain returned a URL but it 404s" — confirms whether the
 // file exists, when it was written, and that the server's view of disk matches
@@ -80,9 +83,6 @@ app.get('/api/debug/storage', auth, async (req, res) => {
   }
   res.json(out);
 });
-
-// Auth middleware (matches existing claude-dash pattern)
-const auth = (req, res, next) => next();
 
 // Service-to-service auth: dash → brain calls. Header `x-dash-password` must
 // match DASH_PASSWORD env var. Used only by /api/agents/* (no UI fallback).
