@@ -691,6 +691,108 @@
     background: var(--surface2);
     line-height: 1.7;
   }
+
+  /* Mobile chip + sheet — hidden on desktop, brought in by the media query below */
+  .client-switcher,
+  .client-sheet,
+  .client-sheet-scrim { display: none; }
+
+  @media (max-width: 1024px) {
+    body { grid-template-columns: 1fr; }
+    .sidebar, .main { display: none; }
+    .chat-panel {
+      grid-column: 1 / -1;
+      width: 100%;
+      border-right: none;
+      height: calc(100dvh - 52px);
+    }
+    header .run-btn { display: none; }
+
+    /* Swap the desktop "active context" badge for a tappable chip */
+    .active-context { display: none !important; }
+    .client-switcher {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 5px 10px;
+      border: 1px solid var(--accent-mid);
+      border-radius: 2px;
+      cursor: pointer;
+      max-width: 60vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .client-switcher:hover,
+    .client-switcher:active { background: var(--accent-mid); }
+    .client-switcher .caret { font-size: 9px; opacity: 0.7; }
+
+    /* Scrim */
+    .client-sheet-scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+      z-index: 200;
+    }
+    .client-sheet-scrim.open { opacity: 1; pointer-events: auto; }
+
+    /* Bottom sheet */
+    .client-sheet {
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      max-height: 75vh;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 12px 12px 0 0;
+      transform: translateY(100%);
+      transition: transform 0.22s ease;
+      z-index: 201;
+      padding: 12px;
+      gap: 8px;
+    }
+    .client-sheet.open { transform: translateY(0); }
+
+    .client-sheet-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      padding: 4px 4px 8px;
+    }
+    .client-sheet-close {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 3px 10px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    .client-sheet-list {
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -747,6 +849,10 @@
   <div class="chat-header">
     <div class="chat-header-title">Brain</div>
     <div class="active-context" id="active-context" style="display:none;"></div>
+    <button class="client-switcher" id="client-switcher" onclick="openClientSheet()">
+      <span id="client-switcher-label">Pick client</span>
+      <span class="caret">▾</span>
+    </button>
   </div>
   <div class="chat-messages" id="chat-messages">
     <div class="welcome-msg">
@@ -775,6 +881,20 @@
 
 <div class="loading-overlay" id="loading">RUNNING BRIEFING...</div>
 
+<!-- Mobile client picker (hidden on desktop via CSS) -->
+<div class="client-sheet-scrim" id="client-sheet-scrim" onclick="closeClientSheet()"></div>
+<aside class="client-sheet" id="client-sheet">
+  <div class="client-sheet-header">
+    <span>Switch client</span>
+    <button class="client-sheet-close" onclick="closeClientSheet()">Close</button>
+  </div>
+  <div class="client-type-tabs">
+    <button class="type-tab active" onclick="selectType('sticker', this)">STICKER</button>
+    <button class="type-tab" onclick="selectType('shed', this)">SHED</button>
+  </div>
+  <div class="client-sheet-list" id="client-sheet-list"></div>
+</aside>
+
 <script>
 let allClients = {};
 let currentType = 'sticker';
@@ -787,6 +907,10 @@ async function loadClients() {
     const data = await res.json();
     allClients = data;
     renderClientList(currentType);
+    // On mobile, auto-open the picker if no client is selected yet
+    if (window.matchMedia('(max-width: 1024px)').matches && !activeClient) {
+      openClientSheet();
+    }
   } catch (e) {
     console.error('Failed to load clients:', e);
   }
@@ -805,9 +929,12 @@ loadBriefing();
 
 function selectType(type, el) {
   currentType = type;
-  document.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
+  // Sync active state across both sidebar and sheet tabs
+  document.querySelectorAll('.type-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.trim().toLowerCase() === type);
+  });
   renderClientList(type);
+  renderClientSheet();
 }
 
 function renderClientList(type) {
@@ -833,12 +960,47 @@ function renderClientList(type) {
 function selectClient(client) {
   activeClient = { ...client };
   renderClientList(currentType);
+  renderClientSheet();
   const ctx = document.getElementById('active-context');
   ctx.textContent = client.name;
   ctx.style.display = 'block';
+  const lbl = document.getElementById('client-switcher-label');
+  if (lbl) lbl.textContent = client.name;
   const msg = `Now working on: ${client.name}`;
   appendMessage('assistant', msg);
   chatHistory.push({ role: 'assistant', content: msg });
+}
+
+function renderClientSheet() {
+  const target = document.getElementById('client-sheet-list');
+  if (!target) return;
+  target.innerHTML = '';
+  const clients = getClientsByType(currentType);
+  if (!clients.length) {
+    target.innerHTML = `<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);padding:8px;">No clients</div>`;
+    return;
+  }
+  clients.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'client-item' + (activeClient?.id === c.id ? ' active' : '');
+    div.innerHTML = `
+      <span class="client-name">${c.name}</span>
+      ${c.cppTarget ? `<span class="client-cpp">$${c.cppTarget}</span>` : ''}
+    `;
+    div.onclick = () => { selectClient(c); closeClientSheet(); };
+    target.appendChild(div);
+  });
+}
+
+function openClientSheet() {
+  renderClientSheet();
+  document.getElementById('client-sheet').classList.add('open');
+  document.getElementById('client-sheet-scrim').classList.add('open');
+}
+
+function closeClientSheet() {
+  document.getElementById('client-sheet').classList.remove('open');
+  document.getElementById('client-sheet-scrim').classList.remove('open');
 }
 
 async function loadBriefing() {
