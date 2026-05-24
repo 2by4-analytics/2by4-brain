@@ -49,7 +49,10 @@ export async function persistFalVariants(clientId, variants) {
 
   return Promise.all(variants.map(async (v, i) => {
     if (v.error) return v;
-    if (!v.imageUrl) return v;
+    if (!v.imageUrl) {
+      console.warn(`[persist] variant ${i} ${safeClient}: no imageUrl and no error — surfacing as error so the model sees it. keys=${Object.keys(v).join(',')}`);
+      return { ...v, error: 'upstream returned variant with no imageUrl and no error — check Brain logs for the raw fal response' };
+    }
     const falUrl = v.imageUrl;
 
     try {

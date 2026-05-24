@@ -255,15 +255,27 @@ async function generateBatchGptImage2({ prompt, aspectRatio, count }) {
     const { status_url, response_url } = await submitJob(modelId, input);
     const result = await pollJob(status_url, response_url, { maxWaitMs: MODEL_TIMEOUTS_MS['gpt-image-2'] ?? DEFAULT_TIMEOUT_MS });
     const images = result.images || [];
-    const variants = images.map((img) => ({
-      imageUrl: img.url,
-      seed: null,
-      model: 'gpt-image-2',
-      costEstimate: MODEL_COSTS['gpt-image-2'] ?? null,
-      rawResponse: img
-    }));
+    if (images.length === 0) {
+      console.warn(`[gpt-image-2] fal returned 0 images. prompt=${JSON.stringify(prompt).slice(0, 200)} raw=${JSON.stringify(result).slice(0, 1000)}`);
+    }
+    const variants = images.map((img, i) => {
+      if (!img?.url) {
+        console.warn(`[gpt-image-2] image ${i} missing url. raw=${JSON.stringify(img).slice(0, 300)}`);
+        return { error: `fal image ${i} returned without a url field — raw entry: ${JSON.stringify(img).slice(0, 200)}`, index: i };
+      }
+      return {
+        imageUrl: img.url,
+        seed: null,
+        model: 'gpt-image-2',
+        costEstimate: MODEL_COSTS['gpt-image-2'] ?? null,
+        rawResponse: img
+      };
+    });
     while (variants.length < count) {
-      variants.push({ error: 'fal returned fewer images than requested', index: variants.length });
+      const hint = (result.error || result.blocked || result.moderation)
+        ? ` — fal flagged: ${JSON.stringify(result).slice(0, 300)}`
+        : '';
+      variants.push({ error: `fal returned fewer images than requested${hint}`, index: variants.length });
     }
     return {
       model: 'gpt-image-2',
