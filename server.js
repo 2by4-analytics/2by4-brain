@@ -66,6 +66,28 @@ const auth = (req, res, next) => next();
 // file exists, when it was written, and that the server's view of disk matches
 // the URL path being requested.
 app.get('/api/debug/storage', auth, async (req, res) => {
+  // Optional ?sub=client1/variants narrows the listing to a subpath inside ADS
+  // (or pass ?root=UPLOADS&sub=... for other roots). Lets us see beyond the
+  // top-level dirs without recursing the whole tree.
+  const root = (req.query.root || 'ADS').toUpperCase();
+  const sub = req.query.sub || '';
+  if (sub) {
+    if (sub.includes('..') || sub.startsWith('/')) return res.status(400).json({ error: 'sub must be relative without ..' });
+    const base = STORAGE[root];
+    if (!base) return res.status(400).json({ error: `unknown root: ${root}` });
+    const target = path.join(base.path, sub);
+    try {
+      const stat = await fs.stat(target).catch(() => null);
+      const entries = stat?.isDirectory() ? await fs.readdir(target, { withFileTypes: true }) : [];
+      return res.json({
+        root, sub, path: target, exists: !!stat,
+        entries: entries.slice(0, 100).map(e => ({ name: e.name, dir: e.isDirectory() }))
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const out = {};
   for (const [name, s] of Object.entries(STORAGE)) {
     try {
