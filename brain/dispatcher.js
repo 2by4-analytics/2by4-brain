@@ -108,6 +108,9 @@ When Alan identifies a bug or requests a code change in dash or brain:
 ## URL fabrication — STRICT
 NEVER write a URL in your reply that did not appear verbatim in the most recent tool_result for this turn. This applies especially to image URLs (fal.media, brain.2by4llc.com/ads, /uploads, /videos). If a tool returned an error or no URL, say "the tool failed — error: <message>" and ask Alan how to proceed. Do NOT guess, reconstruct, or recall URLs from earlier turns. Image URLs from past tool calls almost certainly 404 because Railway disk wipes on every deploy. If Alan refers to "that ad" or "that image", call the relevant tool again to regenerate — do not paste the old URL.
 
+## Never imitate stripped placeholders
+You may see the token "[…]" inside past assistant turns where image URLs used to be — that's an internal stripping marker, NOT a valid output format. NEVER write "[…]" in your reply. If you just generated images and the tool_result for this turn contains real URLs, paste those URLs literally. If a variant has no URL and only an error, say "V1 failed: <error>" — do not substitute "[…]" as a placeholder.
+
 ## Style
 - Be concise. Alan is busy.
 - Use numbers. Be specific.
@@ -142,26 +145,41 @@ async function fetchImageAsBase64(url) {
 }
 
 // Strip image / video URLs from past assistant messages so Brain can't pattern-match
-// and replay stale URLs from chat history. Old brain.2by4llc.com/ads/... URLs 404
-// after Railway redeploys; old fal.media URLs expire after ~30 days.
-// Replacement is a tiny, non-instructional token — earlier versions used a sentence
+// and replay stale URLs from chat history. Third-party CDNs (fal.media) expire after
+// ~30 days, so those MUST be stripped. Brain-hosted URLs are persistent (assuming the
+// Railway volume is mounted at ADS_STORAGE_DIR) and are kept visible so the model
+// sees real URLs in past turns and writes real URLs in new turns — when EVERYTHING
+// in past turns is a [...] placeholder, the model imitates the placeholder format
+// instead of pasting fresh URLs from the latest tool_result.
+//
+// Replacement token is short and non-instructional — earlier versions used a sentence
 // like "[stale-media-url-stripped — call the tool again to regenerate]" but the
-// model treated that as an in-context example of what its own responses should
-// look like and started emitting it verbatim instead of calling the tool.
+// model treated that as an in-context example of its own response format and emitted
+// it verbatim instead of calling the tool.
 const STRIPPED_URL_TOKEN = '[…]';
+const BRAIN_HOST = (() => {
+  try { return new URL(process.env.BRAIN_PUBLIC_URL || `http://localhost:${process.env.PORT || 3001}`).host; }
+  catch { return null; }
+})();
 function stripStaleMediaUrlsFromAssistant(messages) {
   const mediaRe = /https?:\/\/[^\s<)]+?\.(?:png|jpg|jpeg|gif|webp|mp4|webm|mov)(?:\?[^\s<)]*)?/gi;
+  const replaceInText = (text) => text.replace(mediaRe, (url) => {
+    try {
+      if (BRAIN_HOST && new URL(url).host === BRAIN_HOST) return url;
+    } catch {}
+    return STRIPPED_URL_TOKEN;
+  });
   return messages.map((m) => {
     if (m.role !== 'assistant') return m;
     if (typeof m.content === 'string') {
-      return { ...m, content: m.content.replace(mediaRe, STRIPPED_URL_TOKEN) };
+      return { ...m, content: replaceInText(m.content) };
     }
     if (Array.isArray(m.content)) {
       return {
         ...m,
         content: m.content.map((block) =>
           block.type === 'text'
-            ? { ...block, text: block.text.replace(mediaRe, STRIPPED_URL_TOKEN) }
+            ? { ...block, text: replaceInText(block.text) }
             : block
         )
       };
