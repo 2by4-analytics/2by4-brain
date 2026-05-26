@@ -111,15 +111,89 @@ export const BRANDS = {
     overlayPosition: 'bottom'
   },
 
-  // Shed clients awaiting brand direction — fill in palette/font/vibe as we go.
-  'us-patriot-buildings':   { ...DEFAULT, type: 'shed', name: 'US Patriot Buildings',         vibe: 'TODO' },
-  'twin-city-barns':        { ...DEFAULT, type: 'shed', name: 'Twin City Barns',              vibe: 'TODO' },
-  'speedy-sheds':           { ...DEFAULT, type: 'shed', name: 'Speedy Sheds',                 vibe: 'TODO' },
-  'burnett':                { ...DEFAULT, type: 'shed', name: 'Burnett Affordable Buildings', vibe: 'TODO' },
-  'london-barns-and-sheds': { ...DEFAULT, type: 'shed', name: 'London Barns & Sheds',         vibe: 'TODO' },
-  'repo-depot':             { ...DEFAULT, type: 'shed', name: 'Repo Depot',                    vibe: 'TODO' },
-  'timber-hollow':          { ...DEFAULT, type: 'shed', name: 'Timber Hollow',                vibe: 'TODO' },
-  'willow-lake-sheds':      { ...DEFAULT, type: 'shed', name: 'Willow Lake Sheds',            vibe: 'TODO' }
+  // Palettes marked "placeholder" are neutral/name-derived — these clients have
+  // no documented brand colors yet; swap in real hex when confirmed. Vibe +
+  // basePromptHints are tailored and drive the imagery regardless.
+  'us-patriot-buildings': {
+    type: 'shed',
+    name: 'US Patriot Buildings',
+    vibe: 'Oklahoma-built portable buildings, factory-direct, practical and no-pressure. Subtle American warmth via rust/copper tone (not flag-waving). Buildings on rural/small-town OK & AR property — open land, big sky, honest working-people feel. Rent-to-own / no credit check is a core hook.',
+    basePromptHints: 'portable building on rural Oklahoma or Arkansas property, open land, big sky, warm natural light, rust/copper accent tone, practical and trustworthy, space for price/financing/CTA overlay',
+    avoid: 'overt political or flag imagery, high-pressure salesy feel, urban settings, snow, clutter, fake-looking renders',
+    palette: { overlay: '#2b1c12', headline: '#ffffff', sub: '#d99a6c' }, // brand rust #b5703c
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'burnett': {
+    type: 'shed',
+    name: 'Burnett Affordable Buildings',
+    vibe: 'Affordable sheds, barns, cabins & building shells across Oklahoma & Arkansas. Approachable, value-forward, practical — buildings on rural/small-town OK/AR property. Black wordmark brand. Burnett sells shells (exterior only), so lean "ready to customize / shed-to-home," not turnkey-furnished. Rent-to-own / no credit check hooks.',
+    basePromptHints: 'affordable portable shed, barn, or cabin shell on rural Oklahoma/Arkansas property, open land, natural daylight, sturdy and approachable, space for price/financing overlay',
+    avoid: 'turnkey/furnished interior framing, luxury feel, urban settings, clutter, snow, fake-looking renders',
+    palette: { overlay: '#1c1c1c', headline: '#ffffff', sub: '#dcdcdc' }, // matches black wordmark
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'timber-hollow': {
+    type: 'shed',
+    name: 'Timber Hollow',
+    vibe: 'Rustic, woodsy, cabin-forward. Timber-built cabins, barns, and sheds in natural wooded settings — tree lines, dappled light, warm rustic charm. Premium-rustic. Financing / rent-to-own hooks.',
+    basePromptHints: 'rustic timber cabin or shed in a wooded natural setting, tree line, warm dappled light, craftsmanship, cozy rustic-modern feel, space for clean price/financing overlay',
+    avoid: 'urban settings, cold sterile tones, flat midday light, clutter, fake-looking renders',
+    palette: { overlay: '#2d3326', headline: '#ffffff', sub: '#cbb994' }, // placeholder (woodsy, name-derived)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'willow-lake-sheds': {
+    type: 'shed',
+    name: 'Willow Lake Sheds',
+    vibe: 'Calm, natural, lakeside. Sheds and cabins in serene outdoor settings — water, willows, soft natural light. Peaceful, clean, dependable. Financing / rent-to-own hooks.',
+    basePromptHints: 'portable shed or cabin in a serene lakeside or natural setting, soft natural light, calm and clean, sturdy build, space for clean price/financing overlay',
+    avoid: 'busy or urban settings, harsh light, clutter, dark moody tones, fake-looking renders',
+    palette: { overlay: '#1f3340', headline: '#ffffff', sub: '#cfe0e8' }, // placeholder (lakeside, name-derived)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'repo-depot': {
+    type: 'shed',
+    name: 'Repo Depot',
+    vibe: 'Value and deals — quality repo / clearance portable buildings at a discount. Bold, "priced to move" energy. Sturdy buildings shown clearly with price/deal front and center; offer-driven by nature (repo deals, discounts, rent-to-own).',
+    basePromptHints: 'sturdy portable building shown clearly on a lot or open yard, bright daylight, value/deal energy, clean and trustworthy, strong space for a price/offer overlay',
+    avoid: 'junky or run-down look (still quality buildings), clutter, dark moody tones, luxury framing, fake-looking renders',
+    palette: { overlay: '#1f2630', headline: '#ffffff', sub: '#d8e0e8' }, // placeholder (neutral)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'twin-city-barns': {
+    type: 'shed',
+    name: 'Twin City Barns',
+    vibe: 'Barn-forward portable buildings — sturdy barns, garages, and sheds on open property with a clean, dependable feel. Straightforward dealer, value + quality. Financing / rent-to-own hooks.',
+    basePromptHints: 'portable barn or shed on open property, blue sky, natural daylight, sturdy dependable build, clean and approachable, space for price/financing overlay',
+    avoid: 'clutter, flimsy or cheap-looking builds, dark moody tones, urban settings, fake-looking renders',
+    palette: { overlay: '#1f2630', headline: '#ffffff', sub: '#d8e0e8' }, // placeholder (neutral)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'speedy-sheds': {
+    type: 'shed',
+    name: 'Speedy Sheds',
+    vibe: 'Fast, easy, get-your-shed-quick. Sheds and portable buildings shown clean and ready to deliver; energetic, approachable, value-forward. Quick-delivery and financing / rent-to-own are natural hooks.',
+    basePromptHints: 'clean portable shed ready for delivery, bright daylight, approachable and energetic, sturdy build, open yard or lot, space for price/financing/CTA overlay',
+    avoid: 'slow or heavy mood, clutter, cheap-looking sheds, dark tones, urban settings, fake-looking renders',
+    palette: { overlay: '#1f2630', headline: '#ffffff', sub: '#d8e0e8' }, // placeholder (neutral)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  },
+  'london-barns-and-sheds': {
+    type: 'shed',
+    name: 'London Barns & Sheds',
+    vibe: 'Barns and sheds with a clean, dependable, small-town feel. Sturdy portable buildings on open rural property. Value + quality; financing / rent-to-own hooks.',
+    basePromptHints: 'portable barn or shed on open rural property, blue sky, natural daylight, sturdy dependable build, clean and approachable, space for price/financing overlay',
+    avoid: 'clutter, cheap-looking builds, dark moody tones, urban settings, fake-looking renders',
+    palette: { overlay: '#1f2630', headline: '#ffffff', sub: '#d8e0e8' }, // placeholder (neutral)
+    font: { headline: 'oswald', sub: 'inter' },
+    overlayPosition: 'bottom'
+  }
 };
 
 export function getBrand(clientId) {
