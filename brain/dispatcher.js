@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchClients } from '../config/clients.js';
+import { listBrandedClients } from '../ads/brands.js';
 import { TOOL_DEFINITIONS, executeTool } from './tools.js';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -230,10 +231,17 @@ export async function chatWithBrain(messages, clientContext = null) {
   if (clientContext) {
     systemPrompt += `\n\n## Current Working Context\nAlan is focused on: ${clientContext.name} (${clientContext.type}). Client ID: ${clientContext.id}. CPP target: $${clientContext.cppTarget}.`;
   } else {
-    const clientList = Object.entries(allClients)
+    const stickerList = Object.entries(allClients)
       .map(([id, c]) => `- ${c.name} (id: ${id}) — ${c.type}, CPP target $${c.cppTarget}`)
       .join('\n');
-    systemPrompt += `\n\n## Current Clients\n${clientList}`;
+    // Shed clients aren't in Dash; source the real roster from the ad-brand
+    // config so Brain knows them instead of guessing. Sheds are lead-gen (CPL,
+    // no CPP) and use slug ids for ad generation.
+    const shedList = listBrandedClients()
+      .filter(c => c.type === 'shed')
+      .map(c => `- ${c.name} (id: ${c.id}) — shed (lead-gen)`)
+      .join('\n');
+    systemPrompt += `\n\n## Current Clients\n${stickerList}\n${shedList}`;
   }
 
   // Agentic loop — Brain can call tools multiple times before responding.
