@@ -16,6 +16,20 @@ import { summarizeMeeting } from './agents/meeting-recap.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: '20mb' }));
+
+// Internal tool — keep Brain out of search engines (it was getting indexed by
+// Google). The X-Robots-Tag header on every response is the authoritative
+// noindex signal; /robots.txt blocks future crawling. Runs before static so
+// the dashboard HTML + all assets inherit the header. Already-indexed URLs need
+// a one-time GSC Removals request to clear immediately.
+app.use((req, res, next) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send('User-agent: *\nDisallow: /\n');
+});
+
 app.use(express.static(path.join(__dirname, 'dashboard')));
 
 // Resolve storage paths once + log them at startup. When ADS_STORAGE_DIR (etc.)
