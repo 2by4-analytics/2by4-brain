@@ -16,7 +16,9 @@ export const MODELS = {
 export const EDIT_MODELS = {
   'nano-banana-2': 'fal-ai/nano-banana/edit',
   'flux-dev':      'fal-ai/flux/dev/image-to-image',
-  'flux-pro':      'fal-ai/flux-pro/v1.1/image-to-image',
+  // flux-pro img2img = FLUX.1 Kontext [pro]. The old `flux-pro/v1.1/image-to-image`
+  // path was removed by fal (404). Kontext is the instruction-driven edit model.
+  'flux-pro':      'fal-ai/flux-pro/kontext',
   'gpt-image-2':   'fal-ai/gpt-image-2/edit'
 };
 
@@ -139,9 +141,14 @@ export async function generateVariation({ model = 'nano-banana-2', prompt, sourc
   if (!sourceImageUrl) throw new Error('sourceImageUrl is required');
 
   const input = { prompt };
-  if (model.startsWith('flux')) {
+  if (model === 'flux-pro') {
+    // FLUX.1 Kontext [pro]: instruction-driven edit. Takes image_url + prompt only.
+    // Does NOT accept num_inference_steps or strength — it steers via guidance_scale
+    // (fal default 3.5). Sending the old flux params here is rejected/ignored.
     input.image_url = sourceImageUrl;
-    input.num_inference_steps = model === 'flux-pro' ? 40 : 28;
+  } else if (model === 'flux-dev') {
+    input.image_url = sourceImageUrl;
+    input.num_inference_steps = 28;
     input.strength = 0.75; // how much to deviate from source
   } else if (model === 'gpt-image-2') {
     input.image_urls = [sourceImageUrl];
